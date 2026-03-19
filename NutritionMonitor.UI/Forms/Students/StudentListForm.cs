@@ -1,7 +1,14 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿// File Path: NutritionMonitor.UI/Forms/Students/StudentListForm.cs
+using Microsoft.Extensions.DependencyInjection;
 using NutritionMonitor.Models.DTOs;
 using NutritionMonitor.Models.Interfaces;
 using SerilogLog = Serilog.Log;
+using System.Drawing;
+using System.Windows.Forms;
+using System.Collections.Generic;
+using System;
+using System.Threading.Tasks;
+using System.Linq;
 
 namespace NutritionMonitor.UI.Forms.Students;
 
@@ -65,7 +72,8 @@ public class StudentListForm : UserControl
             RowCount = 3,
             ColumnCount = 1,
             BackColor = BgColor,
-            Padding = new Padding(0)
+            Padding = new Padding(0),
+            Margin = new Padding(0)
         };
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 68f));  // toolbar
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f)); // grid
@@ -98,7 +106,28 @@ public class StudentListForm : UserControl
                 _toolbarPanel.Width, _toolbarPanel.Height - 1);
         };
 
-        // ── Search row ────────────────────────────────────────────────────────
+        var toolbarLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            Margin = new Padding(0)
+        };
+        toolbarLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        toolbarLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        toolbarLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+
+        // ── Search row (Left Flow) ────────────────────────────────────────────
+        var leftFlow = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            AutoSize = false,
+            Margin = new Padding(0),
+            Padding = new Padding(0, 16, 0, 0) // Simulates Point(X, 16) vertical center
+        };
+
         var searchIcon = new Label
         {
             Text = "🔍",
@@ -106,32 +135,47 @@ public class StudentListForm : UserControl
             ForeColor = TextMuted,
             AutoSize = false,
             Size = new Size(28, 36),
-            Location = new Point(16, 16),
-            TextAlign = ContentAlignment.MiddleCenter
+            TextAlign = ContentAlignment.MiddleCenter,
+            Margin = new Padding(0)
         };
 
         _txtSearch = new TextBox
         {
+            AutoSize = false,
             Font = new Font("Segoe UI", 10f),
             ForeColor = TextDark,
             BackColor = Color.FromArgb(246, 248, 252),
             BorderStyle = BorderStyle.FixedSingle,
             PlaceholderText = "Search by name, student number, grade or section…",
-            Location = new Point(44, 16),
             Size = new Size(340, 36),
+            Margin = new Padding(0, 0, 8, 0),
             TabIndex = 0
         };
 
-        _btnSearch = MakeButton("Search", TealAccent, Color.White, new Point(392, 16), 88);
-        _btnClear = MakeButton("Clear", Color.FromArgb(240, 244, 248), TextMid, new Point(488, 16), 70);
+        _btnSearch = MakeButton("Search", TealAccent, Color.White, 88);
+        _btnClear = MakeButton("Clear", Color.FromArgb(240, 244, 248), TextMid, 70);
+        _btnClear.Margin = new Padding(0); // Removes trailing margin for left group
         _btnClear.FlatAppearance.BorderColor = BorderLight;
         _btnClear.FlatAppearance.BorderSize = 1;
 
-        // ── Action buttons (right-aligned) ────────────────────────────────────
-        _btnAdd = MakeButton("＋  Add Student", TealAccent, Color.White, Point.Empty, 130);
-        _btnEdit = MakeButton("✎  Edit", Color.FromArgb(240, 244, 248), TextMid, Point.Empty, 90);
-        _btnDelete = MakeButton("🗑  Delete", Color.FromArgb(240, 244, 248), DangerRed, Point.Empty, 90);
-        _btnRefresh = MakeButton("↺  Refresh", Color.FromArgb(240, 244, 248), TextMid, Point.Empty, 90);
+        leftFlow.Controls.AddRange(new Control[] { searchIcon, _txtSearch, _btnSearch, _btnClear });
+
+        // ── Action buttons (Right Flow) ───────────────────────────────────────
+        var rightFlow = new FlowLayoutPanel
+        {
+            Anchor = AnchorStyles.Right | AnchorStyles.Top | AnchorStyles.Bottom,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            AutoSize = true,
+            Margin = new Padding(0),
+            Padding = new Padding(0, 16, 0, 0)
+        };
+
+        _btnAdd = MakeButton("＋  Add Student", TealAccent, Color.White, 130);
+        _btnEdit = MakeButton("✎  Edit", Color.FromArgb(240, 244, 248), TextMid, 90);
+        _btnDelete = MakeButton("🗑  Delete", Color.FromArgb(240, 244, 248), DangerRed, 90);
+        _btnRefresh = MakeButton("↺  Refresh", Color.FromArgb(240, 244, 248), TextMid, 90);
+        _btnRefresh.Margin = new Padding(0); // Last item has no right margin
 
         _btnEdit.FlatAppearance.BorderSize = 1;
         _btnEdit.FlatAppearance.BorderColor = BorderLight;
@@ -143,15 +187,12 @@ public class StudentListForm : UserControl
         _btnEdit.Enabled = false;
         _btnDelete.Enabled = false;
 
-        _toolbarPanel.Controls.AddRange(new Control[]
-        {
-            searchIcon, _txtSearch, _btnSearch, _btnClear,
-            _btnAdd, _btnEdit, _btnDelete, _btnRefresh
-        });
+        rightFlow.Controls.AddRange(new Control[] { _btnAdd, _btnEdit, _btnDelete, _btnRefresh });
 
-        // Position right-side buttons on resize
-        _toolbarPanel.Resize += (_, _) => PositionToolbarRight();
-        PositionToolbarRight();
+        toolbarLayout.Controls.Add(leftFlow, 0, 0);
+        toolbarLayout.Controls.Add(rightFlow, 1, 0);
+
+        _toolbarPanel.Controls.Add(toolbarLayout);
 
         // Events
         _btnSearch.Click += async (_, _) => await SearchAsync();
@@ -168,24 +209,6 @@ public class StudentListForm : UserControl
         {
             if (e.KeyCode == Keys.Enter) await SearchAsync();
         };
-    }
-
-    private void PositionToolbarRight()
-    {
-        int right = _toolbarPanel.Width - 16;
-        int y = 16;
-        int h = 36;
-
-        _btnRefresh.Location = new Point(right - _btnRefresh.Width, y);
-        right -= _btnRefresh.Width + 8;
-
-        _btnDelete.Location = new Point(right - _btnDelete.Width, y);
-        right -= _btnDelete.Width + 8;
-
-        _btnEdit.Location = new Point(right - _btnEdit.Width, y);
-        right -= _btnEdit.Width + 8;
-
-        _btnAdd.Location = new Point(right - _btnAdd.Width, y);
     }
 
     private void BuildGrid()
@@ -300,15 +323,26 @@ public class StudentListForm : UserControl
             e.Graphics.DrawLine(pen, 0, 0, _statusBar.Width, 0);
         };
 
+        var statusLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            Margin = new Padding(0)
+        };
+        statusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+        statusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+        statusLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+
         _lblCount = new Label
         {
             Text = "Loading…",
             Font = new Font("Segoe UI", 8.5f),
             ForeColor = TextMuted,
             AutoSize = true,
-            Location = new Point(0, 0),
+            Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Bottom,
             TextAlign = ContentAlignment.MiddleLeft,
-            Height = 36
+            Margin = new Padding(0)
         };
 
         _lblStatus = new Label
@@ -317,17 +351,15 @@ public class StudentListForm : UserControl
             Font = new Font("Segoe UI", 8.5f),
             ForeColor = TealAccent,
             AutoSize = true,
-            TextAlign = ContentAlignment.MiddleLeft,
-            Height = 36
+            Anchor = AnchorStyles.Right | AnchorStyles.Top | AnchorStyles.Bottom,
+            TextAlign = ContentAlignment.MiddleRight,
+            Margin = new Padding(0)
         };
 
-        _statusBar.Controls.Add(_lblCount);
-        _statusBar.Controls.Add(_lblStatus);
+        statusLayout.Controls.Add(_lblCount, 0, 0);
+        statusLayout.Controls.Add(_lblStatus, 1, 0);
 
-        _statusBar.Resize += (_, _) =>
-        {
-            _lblStatus.Location = new Point(_statusBar.Width - _lblStatus.Width - 16, 0);
-        };
+        _statusBar.Controls.Add(statusLayout);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -506,11 +538,6 @@ public class StudentListForm : UserControl
     {
         _lblStatus.ForeColor = color;
         _lblStatus.Text = message;
-        _statusBar.Resize += (_, _) =>
-            _lblStatus.Location = new Point(
-                _statusBar.Width - _lblStatus.Width - 16, 0);
-        _lblStatus.Location = new Point(
-            _statusBar.Width - _lblStatus.Width - 16, 0);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -532,7 +559,7 @@ public class StudentListForm : UserControl
     }
 
     private static Button MakeButton(
-        string text, Color bg, Color fg, Point location, int width)
+        string text, Color bg, Color fg, int width)
     {
         var btn = new Button
         {
@@ -542,7 +569,7 @@ public class StudentListForm : UserControl
             ForeColor = fg,
             FlatStyle = FlatStyle.Flat,
             Size = new Size(width, 36),
-            Location = location,
+            Margin = new Padding(0, 0, 8, 0),
             Cursor = Cursors.Hand,
             TabStop = false
         };
