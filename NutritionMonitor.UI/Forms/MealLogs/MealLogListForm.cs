@@ -753,7 +753,7 @@ public class MealLogListForm : UserControl
             Text = text,
             Font = new Font("Segoe UI", 9f),
             BackColor = bg,
-            ForeColor = fg,
+            ForeColor = fg, 
             FlatStyle = FlatStyle.Flat,
             Size = new Size(width, 36),
             Cursor = Cursors.Hand,

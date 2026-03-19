@@ -8,8 +8,8 @@ obj/
 *.db-wal
 
 # Serilog log files
-#Logs/
-#*.log
+Logs/
+*.log
 
 # Visual Studio
 .vs/

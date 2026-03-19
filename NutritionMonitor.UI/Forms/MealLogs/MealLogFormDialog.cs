@@ -1,4 +1,5 @@
-﻿using HarfBuzzSharp;    
+﻿// File Path: NutritionMonitor.UI/Forms/MealLogs/MealLogFormDialog.cs
+using HarfBuzzSharp;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NutritionMonitor.Models.DTOs;
@@ -7,6 +8,10 @@ using NutritionMonitor.Models.Interfaces;
 using System.ComponentModel.DataAnnotations;
 using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 using System.Drawing;
+using System.Collections.Generic;
+using System;
+using System.Threading.Tasks;
+using System.Windows.Forms;
 using SerilogLog = Serilog.Log;
 
 namespace NutritionMonitor.UI.Forms.MealLogs;
@@ -78,7 +83,7 @@ public class MealLogFormDialog : Form
 
         Text = _isEdit ? "Edit Meal Log" : "Add Meal Log";
         Size = new Size(560, 640);
-        MinimumSize = new Size(520, 600);
+        MinimumSize = new Size(480, 400); // Rule 8: Enforced MinimumSize
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.Sizable;
         MaximizeBox = false;
@@ -87,9 +92,25 @@ public class MealLogFormDialog : Form
         BackColor = BgColor;
         Font = new System.Drawing.Font("Segoe UI", 9.5f);
 
-        BuildHeader();
-        BuildBody();
-        BuildFooter();
+        // ROOT LAYOUT - Rule 2: TableLayoutPanel for vertical stacking
+        var rootLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 3,
+            Margin = new Padding(0),
+            Padding = new Padding(0)
+        };
+        rootLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72f)); // Header
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f)); // Body
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 60f)); // Footer
+
+        BuildHeader(rootLayout);
+        BuildBody(rootLayout);
+        BuildFooter(rootLayout);
+
+        Controls.Add(rootLayout);
 
         ResumeLayout(false);
         PerformLayout();
@@ -97,32 +118,43 @@ public class MealLogFormDialog : Form
 
     // ── Header ────────────────────────────────────────────────────────────────
 
-    private void BuildHeader()
+    private void BuildHeader(TableLayoutPanel root)
     {
-        var header = new Panel
+        var headerPanel = new Panel
         {
-            Dock = DockStyle.Top,
-            Height = 68,
-            BackColor = CardBg
+            Dock = DockStyle.Fill,
+            BackColor = CardBg,
+            Margin = new Padding(0)
         };
 
-        header.Paint += (s, e) =>
+        headerPanel.Paint += (s, e) =>
         {
             using var bar = new SolidBrush(TealAccent);
-            e.Graphics.FillRectangle(bar, 0, 0, 4, header.Height);
+            e.Graphics.FillRectangle(bar, 0, 0, 4, headerPanel.Height);
             using var pen = new Pen(BorderLight, 1);
-            e.Graphics.DrawLine(pen, 0, header.Height - 1,
-                header.Width, header.Height - 1);
+            e.Graphics.DrawLine(pen, 0, headerPanel.Height - 1,
+                headerPanel.Width, headerPanel.Height - 1);
         };
+
+        var headerLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Margin = new Padding(0),
+            Padding = new Padding(20, 12, 20, 12)
+        };
+        headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        headerLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        headerLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         var lblTitle = new Label
         {
             Text = _isEdit ? "Edit Meal Log Entry" : "New Meal Log Entry",
             Font = new System.Drawing.Font("Segoe UI", 13f, FontStyle.Bold),
             ForeColor = TextDark,
-            AutoSize = false,
-            Size = new Size(480, 30),
-            Location = new Point(20, 10),
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, 4),
             TextAlign = ContentAlignment.MiddleLeft
         };
 
@@ -131,70 +163,93 @@ public class MealLogFormDialog : Form
             Text = "Record macronutrient and micronutrient intake for a student.",
             Font = new System.Drawing.Font("Segoe UI", 8.5f),
             ForeColor = TextMuted,
-            AutoSize = false,
-            Size = new Size(480, 18),
-            Location = new Point(20, 44),
+            AutoSize = true,
+            Margin = new Padding(0),
             TextAlign = ContentAlignment.MiddleLeft
         };
 
-        header.Controls.AddRange(new Control[] { lblTitle, lblSub });
-        Controls.Add(header);
+        headerLayout.Controls.Add(lblTitle, 0, 0);
+        headerLayout.Controls.Add(lblSub, 0, 1);
+        headerPanel.Controls.Add(headerLayout);
+
+        root.Controls.Add(headerPanel, 0, 0);
     }
 
     // ── Body ──────────────────────────────────────────────────────────────────
 
-    private void BuildBody()
+    private void BuildBody(TableLayoutPanel root)
     {
-        var body = new Panel
+        // Rule 7: Dialogs must wrap their body in a Panel with AutoScroll = true
+        var scrollBody = new Panel
         {
             Dock = DockStyle.Fill,
-            Padding = new Padding(20),
-            AutoScroll = true
+            BackColor = BgColor,
+            AutoScroll = true,
+            Margin = new Padding(0)
         };
 
         var layout = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
             AutoSize = true,
-            ColumnCount = 2
+            ColumnCount = 2,
+            Padding = new Padding(20, 16, 20, 16),
+            Margin = new Padding(0)
         };
 
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
 
         int row = 0;
+        void AddRow() => layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         // ── STUDENT ─────────────────
-        AddFullWidth(layout, MakeLabel("STUDENT"), ref row);
-
-        _cmbStudent = new ComboBox
-        {
-            Dock = DockStyle.Top,
-            Font = new System.Drawing.Font("Segoe UI", 10f),
-            DropDownStyle = ComboBoxStyle.DropDownList
-        };
-
-        foreach (var s in _students)
-            _cmbStudent.Items.Add(s);
-
-        if (_cmbStudent.Items.Count > 0)
-            _cmbStudent.SelectedIndex = 0;
-
-        AddFullWidth(layout, _cmbStudent, ref row);
-
-        // ── DATE + MEAL ─────────────
-        layout.Controls.Add(MakeLabel("LOG DATE"), 0, row);
-        layout.Controls.Add(MakeLabel("MEAL TYPE"), 1, row);
+        AddRow();
+        var lblStudent = MakeLabel("STUDENT");
+        lblStudent.Margin = new Padding(0, 0, 0, 4);
+        layout.Controls.Add(lblStudent, 0, row);
+        layout.SetColumnSpan(lblStudent, 2);
         row++;
 
-        _dtpDate = new DateTimePicker { Dock = DockStyle.Top };
-        _cmbMealType = new ComboBox { Dock = DockStyle.Top };
-
-        _cmbMealType.Items.AddRange(new object[]
+        AddRow();
+        _cmbStudent = new ComboBox
         {
-        "Breakfast", "Lunch", "Dinner", "Snack", "Other"
-        });
+            Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top,
+            Font = new System.Drawing.Font("Segoe UI", 10f),
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Margin = new Padding(0, 0, 0, 16),
+            DisplayMember = "FullName" // Fix for the DTO displaying instead of the name
+        };
+        foreach (var s in _students) _cmbStudent.Items.Add(s);
+        if (_cmbStudent.Items.Count > 0) _cmbStudent.SelectedIndex = 0;
+        layout.Controls.Add(_cmbStudent, 0, row);
+        layout.SetColumnSpan(_cmbStudent, 2);
+        row++;
 
+        // ── DATE + MEAL ─────────────
+        AddRow();
+        var lblDate = MakeLabel("LOG DATE");
+        lblDate.Margin = new Padding(0, 0, 8, 4);
+        var lblMeal = MakeLabel("MEAL TYPE");
+        lblMeal.Margin = new Padding(8, 0, 0, 4);
+        layout.Controls.Add(lblDate, 0, row);
+        layout.Controls.Add(lblMeal, 1, row);
+        row++;
+
+        AddRow();
+        _dtpDate = new DateTimePicker
+        {
+            Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top,
+            Format = DateTimePickerFormat.Short,
+            Margin = new Padding(0, 0, 8, 16)
+        };
+        _cmbMealType = new ComboBox
+        {
+            Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top,
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Margin = new Padding(8, 0, 0, 16)
+        };
+        _cmbMealType.Items.AddRange(new object[] { "Breakfast", "Lunch", "Dinner", "Snack", "Other" });
         _cmbMealType.SelectedIndex = 0;
 
         layout.Controls.Add(_dtpDate, 0, row);
@@ -202,114 +257,88 @@ public class MealLogFormDialog : Form
         row++;
 
         // ── TABS ────────────────────
-        AddFullWidth(layout, MakeLabel("NUTRIENTS"), ref row);
+        AddRow();
+        var lblNutrients = MakeLabel("NUTRIENTS");
+        lblNutrients.Margin = new Padding(0, 0, 0, 4);
+        layout.Controls.Add(lblNutrients, 0, row);
+        layout.SetColumnSpan(lblNutrients, 2);
+        row++;
 
+        AddRow();
         _tabNutrients = new TabControl
         {
-            Dock = DockStyle.Fill,
-            Height = 280
+            Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top,
+            Height = 280,
+            Margin = new Padding(0, 0, 0, 16)
         };
-
         _tabNutrients.TabPages.Add(BuildMacroTab());
         _tabNutrients.TabPages.Add(BuildMicroTab());
-
-        AddFullWidth(layout, _tabNutrients, ref row);
+        layout.Controls.Add(_tabNutrients, 0, row);
+        layout.SetColumnSpan(_tabNutrients, 2);
+        row++;
 
         // ── NOTES ───────────────────
-        AddFullWidth(layout, MakeLabel("NOTES"), ref row);
+        AddRow();
+        var lblNotes = MakeLabel("NOTES");
+        lblNotes.Margin = new Padding(0, 0, 0, 4);
+        layout.Controls.Add(lblNotes, 0, row);
+        layout.SetColumnSpan(lblNotes, 2);
+        row++;
 
+        AddRow();
         _txtNotes = new TextBox
         {
             Multiline = true,
-            Dock = DockStyle.Fill,
-            Height = 80
+            Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top,
+            Height = 80,
+            Margin = new Padding(0, 0, 0, 16)
         };
-
-        AddFullWidth(layout, _txtNotes, ref row);
+        layout.Controls.Add(_txtNotes, 0, row);
+        layout.SetColumnSpan(_txtNotes, 2);
+        row++;
 
         // ── ERROR ───────────────────
+        AddRow();
         _lblError = new Label
         {
             ForeColor = ErrorRed,
-            Dock = DockStyle.Top,
+            BackColor = ErrorLight,
+            Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top,
             Height = 30,
-            Visible = false
+            Visible = false,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Padding = new Padding(8, 0, 0, 0),
+            Margin = new Padding(0, 0, 0, 16)
         };
-
-        AddFullWidth(layout, _lblError, ref row);
-
-        body.Controls.Add(layout);
-        Controls.Add(body);
-    }
-
-
-    private void AddFullWidth(TableLayoutPanel layout, Control control, ref int row)
-    {
-        layout.Controls.Add(control, 0, row);
-        layout.SetColumnSpan(control, 2);
+        layout.Controls.Add(_lblError, 0, row);
+        layout.SetColumnSpan(_lblError, 2);
         row++;
-    }
 
-    private Label MakeLabel(string text)
-    {
-        return new Label
-        {
-            Text = text,
-            Dock = DockStyle.Top,
-            Font = new System.Drawing.Font("Segoe UI", 8f, FontStyle.Bold),
-            ForeColor = LabelColor,
-            Height = 18
-        };
+        scrollBody.Controls.Add(layout);
+        root.Controls.Add(scrollBody, 0, 1);
     }
 
     private TabPage BuildMacroTab()
     {
-        var page = new TabPage("Macronutrients");
-
+        var page = new TabPage("Macronutrients") { BackColor = TabBg, Padding = new Padding(12) };
         var layout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 2
+            ColumnCount = 2,
+            RowCount = 3,
+            AutoSize = true
         };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-
-        string[] labels = {
-        "Calories", "Protein",
-        "Carbs", "Fats",
-        "Fiber"
-    };
-
-        TextBox[] inputs = new TextBox[5];
-
-        for (int i = 0; i < labels.Length; i++)
-        {
-            var panel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(5) };
-
-            var lbl = new Label
-            {
-                Text = labels[i],
-                Dock = DockStyle.Top
-            };
-
-            var txt = new TextBox
-            {
-                Dock = DockStyle.Top
-            };
-
-            panel.Controls.Add(txt);
-            panel.Controls.Add(lbl);
-
-            layout.Controls.Add(panel, i % 2, i / 2);
-            inputs[i] = txt;
-        }
-
-        _txtCalories = inputs[0];
-        _txtProtein = inputs[1];
-        _txtCarbs = inputs[2];
-        _txtFats = inputs[3];
-        _txtFiber = inputs[4];
+        layout.Controls.Add(MakeFieldBlock("CALORIES", "e.g. 500", out _txtCalories), 0, 0);
+        layout.Controls.Add(MakeFieldBlock("PROTEIN (g)", "e.g. 30", out _txtProtein), 1, 0);
+        layout.Controls.Add(MakeFieldBlock("CARBS (g)", "e.g. 50", out _txtCarbs), 0, 1);
+        layout.Controls.Add(MakeFieldBlock("FATS (g)", "e.g. 15", out _txtFats), 1, 1);
+        layout.Controls.Add(MakeFieldBlock("FIBER (g)", "e.g. 8", out _txtFiber), 0, 2);
 
         page.Controls.Add(layout);
         return page;
@@ -317,65 +346,101 @@ public class MealLogFormDialog : Form
 
     private TabPage BuildMicroTab()
     {
-        var page = new TabPage("  Micronutrients  ")
+        var page = new TabPage("  Micronutrients  ") { BackColor = TabBg, Padding = new Padding(12) };
+        var layout = new TableLayoutPanel
         {
-            BackColor = TabBg,
-            Padding = new Padding(12)
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 3,
+            AutoSize = true
         };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-        var fields = new[]
-        {
-            ("VITAMIN A (mcg)", "e.g. 400"),
-            ("VITAMIN C (mg)",  "e.g. 35"),
-            ("VITAMIN D (mcg)", "e.g. 10"),
-            ("CALCIUM (mg)",    "e.g. 700"),
-            ("IRON (mg)",       "e.g. 10"),
-            ("ZINC (mg)",       "e.g. 7"),
-        };
+        layout.Controls.Add(MakeFieldBlock("VITAMIN A (mcg)", "e.g. 400", out _txtVitA), 0, 0);
+        layout.Controls.Add(MakeFieldBlock("VITAMIN C (mg)", "e.g. 35", out _txtVitC), 1, 0);
+        layout.Controls.Add(MakeFieldBlock("VITAMIN D (mcg)", "e.g. 10", out _txtVitD), 0, 1);
+        layout.Controls.Add(MakeFieldBlock("CALCIUM (mg)", "e.g. 700", out _txtCalcium), 1, 1);
+        layout.Controls.Add(MakeFieldBlock("IRON (mg)", "e.g. 10", out _txtIron), 0, 2);
+        layout.Controls.Add(MakeFieldBlock("ZINC (mg)", "e.g. 7", out _txtZinc), 1, 2);
 
-        var inputs = new TextBox[6];
-        int col = 0, row = 0;
-
-        for (int i = 0; i < fields.Length; i++)
-        {
-            int x = 12 + col * 240;
-            int y = 12 + row * 64;
-
-            page.Controls.Add(MakeLabel(fields[i].Item1, new Point(x, y)));
-
-            inputs[i] = MakeNumericBox(fields[i].Item2, new Point(x, y + 20));
-            page.Controls.Add(inputs[i]);
-
-            col++;
-            if (col >= 2) { col = 0; row++; }
-        }
-
-        _txtVitA = inputs[0];
-        _txtVitC = inputs[1];
-        _txtVitD = inputs[2];
-        _txtCalcium = inputs[3];
-        _txtIron = inputs[4];
-        _txtZinc = inputs[5];
-
+        page.Controls.Add(layout);
         return page;
     }
 
-    // ── Footer ────────────────────────────────────────────────────────────────
-
-    private void BuildFooter()
+    private TableLayoutPanel MakeFieldBlock(string labelText, string placeholder, out TextBox txt)
     {
-        var footer = new Panel
+        var block = new TableLayoutPanel
         {
-            Dock = DockStyle.Bottom,
-            Height = 60,
-            BackColor = CardBg,
-            Padding = new Padding(20, 10, 20, 10)
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            AutoSize = true,
+            Margin = new Padding(4, 4, 4, 8)
+        };
+        block.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        block.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        block.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        var lbl = MakeLabel(labelText);
+        lbl.Margin = new Padding(0, 0, 0, 4);
+
+        txt = new TextBox
+        {
+            Font = new System.Drawing.Font("Segoe UI", 10f),
+            ForeColor = Color.FromArgb(22, 32, 50),
+            BackColor = Color.White,
+            BorderStyle = BorderStyle.FixedSingle,
+            PlaceholderText = placeholder,
+            Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top,
+            Height = 34,
+            TextAlign = HorizontalAlignment.Right,
+            Margin = new Padding(0)
         };
 
-        footer.Paint += (s, e) =>
+        block.Controls.Add(lbl, 0, 0);
+        block.Controls.Add(txt, 0, 1);
+        return block;
+    }
+
+    private Label MakeLabel(string text) => new()
+    {
+        Text = text,
+        Font = new System.Drawing.Font("Segoe UI", 7.5f, FontStyle.Bold),
+        ForeColor = LabelColor,
+        AutoSize = true,
+        TextAlign = ContentAlignment.BottomLeft
+    };
+
+    // ── Footer ────────────────────────────────────────────────────────────────
+
+    private void BuildFooter(TableLayoutPanel root)
+    {
+        var footerPanel = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = CardBg,
+            Padding = new Padding(20, 10, 20, 10),
+            Margin = new Padding(0)
+        };
+
+        footerPanel.Paint += (s, e) =>
         {
             using var pen = new Pen(BorderLight, 1);
-            e.Graphics.DrawLine(pen, 0, 0, footer.Width, 0);
+            e.Graphics.DrawLine(pen, 0, 0, footerPanel.Width, 0);
+        };
+
+        // Rule 3: Use FlowLayoutPanel for horizontal toolbars/buttons
+        var btnFlow = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Right,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            AutoSize = true,
+            Margin = new Padding(0)
         };
 
         _btnCancel = new Button
@@ -386,6 +451,7 @@ public class MealLogFormDialog : Form
             ForeColor = TextMid,
             FlatStyle = FlatStyle.Flat,
             Size = new Size(100, 38),
+            Margin = new Padding(0, 0, 12, 0),
             Cursor = Cursors.Hand,
             DialogResult = DialogResult.Cancel
         };
@@ -400,6 +466,7 @@ public class MealLogFormDialog : Form
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat,
             Size = new Size(120, 38),
+            Margin = new Padding(0),
             Cursor = Cursors.Hand
         };
         _btnSave.FlatAppearance.BorderSize = 0;
@@ -407,16 +474,11 @@ public class MealLogFormDialog : Form
         _btnSave.MouseLeave += (_, _) => _btnSave.BackColor = TealAccent;
         _btnSave.Click += async (_, _) => await SaveAsync();
 
-        footer.Controls.AddRange(new Control[] { _btnCancel, _btnSave });
+        btnFlow.Controls.Add(_btnCancel);
+        btnFlow.Controls.Add(_btnSave);
+        footerPanel.Controls.Add(btnFlow);
 
-        footer.Resize += (_, _) =>
-        {
-            _btnSave.Location = new Point(footer.Width - _btnSave.Width - 20, 11);
-            _btnCancel.Location = new Point(
-                footer.Width - _btnSave.Width - _btnCancel.Width - 28, 11);
-        };
-
-        Controls.Add(footer);
+        root.Controls.Add(footerPanel, 0, 2);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -523,6 +585,9 @@ public class MealLogFormDialog : Form
         _btnSave.Enabled = false;
         _btnSave.Text = "Saving…";
 
+        // Rule 11: Render UI changes safely before database transaction
+        await Task.Yield();
+
         try
         {
             using var scope = ServiceLocator.CreateScope();
@@ -581,28 +646,4 @@ public class MealLogFormDialog : Form
             System.Globalization.CultureInfo.InvariantCulture,
             out value) && value >= 0;
     }
-
-    private static TextBox MakeNumericBox(string placeholder, Point location)
-        => new()
-        {
-            Font = new System.Drawing.Font("Segoe UI", 10f),
-            ForeColor = Color.FromArgb(22, 32, 50),
-            BackColor = Color.White,
-            BorderStyle = BorderStyle.FixedSingle,
-            PlaceholderText = placeholder,
-            Location = location,
-            Size = new Size(210, 34),
-            TextAlign = HorizontalAlignment.Right
-        };
-
-    private static Label MakeLabel(string text, Point location) => new()
-    {
-        Text = text,
-        Font = new System.Drawing.Font("Segoe UI", 7.5f, FontStyle.Bold),
-        ForeColor = LabelColor,
-        AutoSize = false,
-        Size = new Size(220, 18),
-        Location = location,
-        TextAlign = ContentAlignment.BottomLeft
-    };
 }

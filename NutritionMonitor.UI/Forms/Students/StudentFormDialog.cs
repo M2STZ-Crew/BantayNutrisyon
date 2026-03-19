@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿// File Path: NutritionMonitor.UI/Forms/Students/StudentFormDialog.cs
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NutritionMonitor.Models.DTOs;
 using NutritionMonitor.Models.Enums;
@@ -7,6 +8,10 @@ using ScottPlot.Hatches;
 using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 using static Microsoft.EntityFrameworkCore.DbLoggerCategory.Model;
 using SerilogLog = Serilog.Log;
+using System.Drawing;
+using System.Windows.Forms;
+using System;
+using System.Threading.Tasks;
 
 namespace NutritionMonitor.UI.Forms.Students;
 
@@ -64,7 +69,7 @@ public class StudentFormDialog : Form
 
         Text = _isEdit ? "Edit Student" : "Add New Student";
         Size = new Size(520, 560);
-        MinimumSize = new Size(480, 520);
+        MinimumSize = new Size(480, 400); // Rule 8: Dialog minimum size
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
@@ -72,21 +77,37 @@ public class StudentFormDialog : Form
         BackColor = BgColor;
         Font = new Font("Segoe UI", 9.5f);
 
-        BuildHeader();
-        BuildFormBody();
-        BuildFooter();
+        // ROOT LAYOUT - Rule 2: TableLayoutPanel for vertical stacking
+        var rootLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 3,
+            Margin = new Padding(0),
+            Padding = new Padding(0)
+        };
+        rootLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72f)); // Header
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f)); // Body
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 60f)); // Footer
+
+        BuildHeader(rootLayout);
+        BuildFormBody(rootLayout);
+        BuildFooter(rootLayout);
+
+        Controls.Add(rootLayout);
 
         ResumeLayout(false);
         PerformLayout();
     }
 
-    private void BuildHeader()
+    private void BuildHeader(TableLayoutPanel root)
     {
         _headerPanel = new Panel
         {
-            Dock = DockStyle.Top,
-            Height = 72,
-            BackColor = CardBg
+            Dock = DockStyle.Fill,
+            BackColor = CardBg,
+            Margin = new Padding(0)
         };
 
         _headerPanel.Paint += (s, e) =>
@@ -98,14 +119,25 @@ public class StudentFormDialog : Form
                 _headerPanel.Width, _headerPanel.Height - 1);
         };
 
+        var headerLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Margin = new Padding(0),
+            Padding = new Padding(20, 12, 20, 12)
+        };
+        headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        headerLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        headerLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
         _lblTitle = new Label
         {
             Text = _isEdit ? "Edit Student Record" : "New Student Record",
             Font = new Font("Segoe UI", 13f, FontStyle.Bold),
             ForeColor = TextDark,
-            AutoSize = false,
-            Size = new Size(460, 30),
-            Location = new Point(20, 12),
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, 4),
             TextAlign = ContentAlignment.MiddleLeft
         };
 
@@ -116,25 +148,38 @@ public class StudentFormDialog : Form
                 : "Fill in the student details below. All fields are required.",
             Font = new Font("Segoe UI", 8.5f),
             ForeColor = TextMuted,
-            AutoSize = false,
-            Size = new Size(460, 18),
-            Location = new Point(20, 46),
+            AutoSize = true,
+            Margin = new Padding(0),
             TextAlign = ContentAlignment.MiddleLeft
         };
 
-        _headerPanel.Controls.AddRange(new Control[] { _lblTitle, _lblSubtitle });
-        Controls.Add(_headerPanel);
+        headerLayout.Controls.Add(_lblTitle, 0, 0);
+        headerLayout.Controls.Add(_lblSubtitle, 0, 1);
+
+        _headerPanel.Controls.Add(headerLayout);
+        root.Controls.Add(_headerPanel, 0, 0);
     }
 
-    private void BuildFormBody()
+    private void BuildFormBody(TableLayoutPanel root)
     {
-        var bodyPanel = new Panel
+        // Rule 7: Dialogs must wrap their body in a Panel with AutoScroll = true
+        var scrollBody = new Panel
         {
             Dock = DockStyle.Fill,
             BackColor = BgColor,
-            Padding = new Padding(20, 16, 20, 0),
-            AutoScroll = true
+            AutoScroll = true,
+            Margin = new Padding(0)
         };
+
+        _formTable = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            ColumnCount = 1,
+            Padding = new Padding(20, 16, 20, 16),
+            Margin = new Padding(0)
+        };
+        _formTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
 
         // Student Number
         var (lblNo, txtNo) = MakeField("Student Number", "e.g. 2024-00001");
@@ -157,7 +202,8 @@ public class StudentFormDialog : Form
             MaxDate = DateTime.Today,
             MinDate = DateTime.Today.AddYears(-25),
             Value = DateTime.Today.AddYears(-12),
-            Width = 440,
+            Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top,
+            Margin = new Padding(0, 0, 0, 16),
             Height = 36
         };
 
@@ -167,11 +213,12 @@ public class StudentFormDialog : Form
         {
             Font = new Font("Segoe UI", 10f),
             DropDownStyle = ComboBoxStyle.DropDownList,
-            Width = 440,
-            Height = 36,
             FlatStyle = FlatStyle.Flat,
             BackColor = CardBg,
-            ForeColor = TextDark
+            ForeColor = TextDark,
+            Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top,
+            Margin = new Padding(0, 0, 0, 16),
+            Height = 36
         };
         _cmbGender.Items.AddRange(new object[] { "Male", "Female" });
         _cmbGender.SelectedIndex = 0;
@@ -192,14 +239,15 @@ public class StudentFormDialog : Form
             ForeColor = ErrorRed,
             BackColor = ErrorLight,
             AutoSize = false,
-            Size = new Size(440, 28),
+            Height = 28,
+            Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top,
+            Margin = new Padding(0, 0, 0, 16),
             Visible = false,
             TextAlign = ContentAlignment.MiddleLeft,
             Padding = new Padding(8, 0, 0, 0)
         };
 
-        // Stack all fields vertically
-        int y = 0;
+        // Stack all fields vertically using Rule 2 TableLayoutPanel config
         var rows = new (Control lbl, Control input)[]
         {
             (lblNo,      txtNo),
@@ -211,35 +259,47 @@ public class StudentFormDialog : Form
             (lblSection, txtSection),
         };
 
+        int rowCount = rows.Length * 2 + 1;
+        _formTable.RowCount = rowCount;
+        for (int i = 0; i < rowCount; i++)
+            _formTable.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
         foreach (var (lbl, input) in rows)
         {
-            lbl.Location = new Point(0, y);
-            input.Location = new Point(0, y + 20);
-            y += 64;
-            bodyPanel.Controls.Add(lbl);
-            bodyPanel.Controls.Add(input);
+            _formTable.Controls.Add(lbl);
+            _formTable.Controls.Add(input);
         }
 
-        _lblError.Location = new Point(0, y + 4);
-        bodyPanel.Controls.Add(_lblError);
+        _formTable.Controls.Add(_lblError);
 
-        Controls.Add(bodyPanel);
+        scrollBody.Controls.Add(_formTable);
+        root.Controls.Add(scrollBody, 0, 1);
     }
 
-    private void BuildFooter()
+    private void BuildFooter(TableLayoutPanel root)
     {
-        var footer = new Panel
+        var footerPanel = new Panel
         {
-            Dock = DockStyle.Bottom,
-            Height = 60,
+            Dock = DockStyle.Fill,
             BackColor = CardBg,
-            Padding = new Padding(20, 10, 20, 10)
+            Padding = new Padding(20, 10, 20, 10),
+            Margin = new Padding(0)
         };
 
-        footer.Paint += (s, e) =>
+        footerPanel.Paint += (s, e) =>
         {
             using var pen = new Pen(Color.FromArgb(225, 232, 242), 1);
-            e.Graphics.DrawLine(pen, 0, 0, footer.Width, 0);
+            e.Graphics.DrawLine(pen, 0, 0, footerPanel.Width, 0);
+        };
+
+        // Rule 3: Use FlowLayoutPanel for horizontal toolbars/buttons
+        var btnFlow = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Right,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            AutoSize = true,
+            Margin = new Padding(0)
         };
 
         _btnCancel = new Button
@@ -250,7 +310,7 @@ public class StudentFormDialog : Form
             ForeColor = TextMid,
             FlatStyle = FlatStyle.Flat,
             Size = new Size(100, 38),
-            Location = new Point(footer.Width - 220, 11),
+            Margin = new Padding(0, 0, 12, 0),
             Cursor = Cursors.Hand,
             DialogResult = DialogResult.Cancel
         };
@@ -265,7 +325,7 @@ public class StudentFormDialog : Form
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat,
             Size = new Size(130, 38),
-            Location = new Point(footer.Width - 110, 11),
+            Margin = new Padding(0),
             Cursor = Cursors.Hand
         };
         _btnSave.FlatAppearance.BorderSize = 0;
@@ -273,17 +333,13 @@ public class StudentFormDialog : Form
         _btnSave.MouseEnter += (_, _) => _btnSave.BackColor = TealHover;
         _btnSave.MouseLeave += (_, _) => _btnSave.BackColor = TealAccent;
 
-        footer.Controls.AddRange(new Control[] { _btnCancel, _btnSave });
-
-        // Re-anchor buttons on resize
-        footer.Resize += (_, _) =>
-        {
-            _btnSave.Location = new Point(footer.Width - _btnSave.Width - 20, 11);
-            _btnCancel.Location = new Point(footer.Width - _btnSave.Width - _btnCancel.Width - 28, 11);
-        };
+        btnFlow.Controls.Add(_btnCancel);
+        btnFlow.Controls.Add(_btnSave);
+        footerPanel.Controls.Add(btnFlow);
 
         _btnSave.Click += async (_, _) => await SaveAsync();
-        Controls.Add(footer);
+
+        root.Controls.Add(footerPanel, 0, 2);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -327,6 +383,9 @@ public class StudentFormDialog : Form
 
         _btnSave.Enabled = false;
         _btnSave.Text = "Saving…";
+
+        // Rule 11: Task.Yield() allows the UI string change to visibly render
+        await Task.Yield();
 
         try
         {
@@ -392,8 +451,10 @@ public class StudentFormDialog : Form
             BackColor = CardBg,
             BorderStyle = BorderStyle.FixedSingle,
             PlaceholderText = placeholder,
-            Width = 440,
-            Height = 36
+            AutoSize = false,
+            Height = 36,
+            Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top, // Rule 5
+            Margin = new Padding(0, 0, 0, 16)
         };
         return (lbl, txt);
     }
@@ -403,8 +464,7 @@ public class StudentFormDialog : Form
         Text = text.ToUpperInvariant(),
         Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
         ForeColor = LabelColor,
-        AutoSize = false,
-        Size = new Size(440, 18),
-        TextAlign = ContentAlignment.BottomLeft
+        AutoSize = true,
+        Margin = new Padding(0, 0, 0, 4)
     };
 }
