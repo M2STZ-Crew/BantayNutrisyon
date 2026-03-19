@@ -1,0 +1,37 @@
+# Build output
+bin/
+obj/
+
+# SQLite database (contains real student data — never push this)
+*.db
+*.db-shm
+*.db-wal
+
+# Serilog log files
+Logs/
+*.log
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# NuGet packages (restored automatically)
+packages/
+*.nupkg
+**/packages/
+
+# .NET
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# AppData runtime files
+AppData/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini

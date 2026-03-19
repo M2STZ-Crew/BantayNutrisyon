@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path=".gitignore" />
+  </Folder>
+  <Project Path="NutritionMonitor.BLL/NutritionMonitor.BLL.csproj" />
+  <Project Path="NutritionMonitor.DAL/NutritionMonitor.DAL.csproj" />
+  <Project Path="NutritionMonitor.Models/NutritionMonitor.Models.csproj" />
+  <Project Path="NutritionMonitor.UI/NutritionMonitor.UI.csproj" />
+</Solution>
