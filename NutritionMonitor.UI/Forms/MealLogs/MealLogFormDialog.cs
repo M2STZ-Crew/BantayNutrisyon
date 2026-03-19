@@ -1,12 +1,26 @@
-﻿// File Path: NutritionMonitor.UI/Forms/MealLogs/MealLogFormDialog.cs
-using HarfBuzzSharp;
-using Microsoft.EntityFrameworkCore;
+﻿// PHASE 2 FIX — MealLogFormDialog.cs
+// Changes made:
+//   [FIX #1] Removed: using HarfBuzzSharp;
+//            → HarfBuzz is a font shaping engine library. Nothing to do with this form.
+//              If the package isn't installed it causes a compile error.
+//
+//   [FIX #2] Removed: using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
+//            → This is an EF Core internal logging class. Not used anywhere in this file.
+//
+//   [FIX #3] Removed: using Microsoft.EntityFrameworkCore;
+//            → Not used in a UI dialog. Repositories handle EF Core, not forms.
+//
+//   [FIX #4] Removed: using NutritionMonitor.Models.Entities;
+//            → This form works with DTOs only (MealLogDto, StudentDto).
+//              It never touches Entity classes directly.
+//
+//   [FIX #5] Removed: using System.ComponentModel.DataAnnotations;
+//            → DataAnnotations (like [Required], [Range]) are not used anywhere
+//              in this file. Validation is done manually via TryParseDouble().
+
 using Microsoft.Extensions.DependencyInjection;
 using NutritionMonitor.Models.DTOs;
-using NutritionMonitor.Models.Entities;
 using NutritionMonitor.Models.Interfaces;
-using System.ComponentModel.DataAnnotations;
-using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 using System.Drawing;
 using System.Collections.Generic;
 using System;
@@ -83,7 +97,7 @@ public class MealLogFormDialog : Form
 
         Text = _isEdit ? "Edit Meal Log" : "Add Meal Log";
         Size = new Size(560, 640);
-        MinimumSize = new Size(480, 400); // Rule 8: Enforced MinimumSize
+        MinimumSize = new Size(480, 400);
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.Sizable;
         MaximizeBox = false;
@@ -92,7 +106,6 @@ public class MealLogFormDialog : Form
         BackColor = BgColor;
         Font = new System.Drawing.Font("Segoe UI", 9.5f);
 
-        // ROOT LAYOUT - Rule 2: TableLayoutPanel for vertical stacking
         var rootLayout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -102,9 +115,9 @@ public class MealLogFormDialog : Form
             Padding = new Padding(0)
         };
         rootLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72f)); // Header
-        rootLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f)); // Body
-        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 60f)); // Footer
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72f));   // Header
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));   // Body
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 60f));   // Footer
 
         BuildHeader(rootLayout);
         BuildBody(rootLayout);
@@ -179,7 +192,6 @@ public class MealLogFormDialog : Form
 
     private void BuildBody(TableLayoutPanel root)
     {
-        // Rule 7: Dialogs must wrap their body in a Panel with AutoScroll = true
         var scrollBody = new Panel
         {
             Dock = DockStyle.Fill,
@@ -203,7 +215,7 @@ public class MealLogFormDialog : Form
         int row = 0;
         void AddRow() => layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-        // ── STUDENT ─────────────────
+        // ── STUDENT ──────────────────────────────────────────────────────────
         AddRow();
         var lblStudent = MakeLabel("STUDENT");
         lblStudent.Margin = new Padding(0, 0, 0, 4);
@@ -218,7 +230,7 @@ public class MealLogFormDialog : Form
             Font = new System.Drawing.Font("Segoe UI", 10f),
             DropDownStyle = ComboBoxStyle.DropDownList,
             Margin = new Padding(0, 0, 0, 16),
-            DisplayMember = "FullName" // Fix for the DTO displaying instead of the name
+            DisplayMember = "FullName"
         };
         foreach (var s in _students) _cmbStudent.Items.Add(s);
         if (_cmbStudent.Items.Count > 0) _cmbStudent.SelectedIndex = 0;
@@ -226,7 +238,7 @@ public class MealLogFormDialog : Form
         layout.SetColumnSpan(_cmbStudent, 2);
         row++;
 
-        // ── DATE + MEAL ─────────────
+        // ── DATE + MEAL TYPE ─────────────────────────────────────────────────
         AddRow();
         var lblDate = MakeLabel("LOG DATE");
         lblDate.Margin = new Padding(0, 0, 8, 4);
@@ -249,14 +261,16 @@ public class MealLogFormDialog : Form
             DropDownStyle = ComboBoxStyle.DropDownList,
             Margin = new Padding(8, 0, 0, 16)
         };
-        _cmbMealType.Items.AddRange(new object[] { "Breakfast", "Lunch", "Dinner", "Snack", "Other" });
+        _cmbMealType.Items.AddRange(new object[]
+        {
+            "Breakfast", "Lunch", "Dinner", "Snack", "Other"
+        });
         _cmbMealType.SelectedIndex = 0;
-
         layout.Controls.Add(_dtpDate, 0, row);
         layout.Controls.Add(_cmbMealType, 1, row);
         row++;
 
-        // ── TABS ────────────────────
+        // ── NUTRIENT TABS ─────────────────────────────────────────────────────
         AddRow();
         var lblNutrients = MakeLabel("NUTRIENTS");
         lblNutrients.Margin = new Padding(0, 0, 0, 4);
@@ -277,7 +291,7 @@ public class MealLogFormDialog : Form
         layout.SetColumnSpan(_tabNutrients, 2);
         row++;
 
-        // ── NOTES ───────────────────
+        // ── NOTES ─────────────────────────────────────────────────────────────
         AddRow();
         var lblNotes = MakeLabel("NOTES");
         lblNotes.Margin = new Padding(0, 0, 0, 4);
@@ -297,7 +311,7 @@ public class MealLogFormDialog : Form
         layout.SetColumnSpan(_txtNotes, 2);
         row++;
 
-        // ── ERROR ───────────────────
+        // ── ERROR ─────────────────────────────────────────────────────────────
         AddRow();
         _lblError = new Label
         {
@@ -312,7 +326,6 @@ public class MealLogFormDialog : Form
         };
         layout.Controls.Add(_lblError, 0, row);
         layout.SetColumnSpan(_lblError, 2);
-        row++;
 
         scrollBody.Controls.Add(layout);
         root.Controls.Add(scrollBody, 0, 1);
@@ -320,7 +333,12 @@ public class MealLogFormDialog : Form
 
     private TabPage BuildMacroTab()
     {
-        var page = new TabPage("Macronutrients") { BackColor = TabBg, Padding = new Padding(12) };
+        var page = new TabPage("Macronutrients")
+        {
+            BackColor = TabBg,
+            Padding = new Padding(12)
+        };
+
         var layout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -346,7 +364,12 @@ public class MealLogFormDialog : Form
 
     private TabPage BuildMicroTab()
     {
-        var page = new TabPage("  Micronutrients  ") { BackColor = TabBg, Padding = new Padding(12) };
+        var page = new TabPage("  Micronutrients  ")
+        {
+            BackColor = TabBg,
+            Padding = new Padding(12)
+        };
+
         var layout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -371,7 +394,8 @@ public class MealLogFormDialog : Form
         return page;
     }
 
-    private TableLayoutPanel MakeFieldBlock(string labelText, string placeholder, out TextBox txt)
+    private TableLayoutPanel MakeFieldBlock(
+        string labelText, string placeholder, out TextBox txt)
     {
         var block = new TableLayoutPanel
         {
@@ -433,7 +457,6 @@ public class MealLogFormDialog : Form
             e.Graphics.DrawLine(pen, 0, 0, footerPanel.Width, 0);
         };
 
-        // Rule 3: Use FlowLayoutPanel for horizontal toolbars/buttons
         var btnFlow = new FlowLayoutPanel
         {
             Dock = DockStyle.Right,
@@ -487,7 +510,6 @@ public class MealLogFormDialog : Form
 
     private void PopulateFields()
     {
-        // Select student
         for (int i = 0; i < _cmbStudent.Items.Count; i++)
         {
             if (_cmbStudent.Items[i] is StudentDto s &&
@@ -500,7 +522,6 @@ public class MealLogFormDialog : Form
 
         _dtpDate.Value = _existing!.LogDate;
 
-        // Meal type
         int mealIdx = _cmbMealType.Items.IndexOf(_existing.MealType);
         _cmbMealType.SelectedIndex = mealIdx >= 0 ? mealIdx : 0;
 
@@ -521,6 +542,7 @@ public class MealLogFormDialog : Form
 
         _txtNotes.Text = _existing.Notes ?? string.Empty;
 
+        // Lock student selector in edit mode — student should not change on an existing log
         _cmbStudent.Enabled = false;
     }
 
@@ -579,14 +601,13 @@ public class MealLogFormDialog : Form
             IronMg = iron,
             ZincMg = zinc,
             Notes = string.IsNullOrWhiteSpace(_txtNotes.Text)
-                             ? null : _txtNotes.Text.Trim()
+                                ? null : _txtNotes.Text.Trim()
         };
 
         _btnSave.Enabled = false;
         _btnSave.Text = "Saving…";
 
-        // Rule 11: Render UI changes safely before database transaction
-        await Task.Yield();
+        await Task.Yield(); // Let UI render the button state change before DB call
 
         try
         {
@@ -641,7 +662,8 @@ public class MealLogFormDialog : Form
     {
         text = text.Trim();
         if (string.IsNullOrEmpty(text)) { value = 0; return true; }
-        return double.TryParse(text,
+        return double.TryParse(
+            text,
             System.Globalization.NumberStyles.Any,
             System.Globalization.CultureInfo.InvariantCulture,
             out value) && value >= 0;

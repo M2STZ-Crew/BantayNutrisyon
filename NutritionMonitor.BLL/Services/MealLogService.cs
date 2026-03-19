@@ -1,4 +1,35 @@
-﻿using NutritionMonitor.DAL.Repositories;
+﻿// PHASE 5 FIX — MealLogService.cs
+// Changes made:
+//
+//   [FIX #1] Removed: using NutritionMonitor.DAL.Repositories;
+//
+//            WHY IT WAS WRONG:
+//            This is the Business Logic Layer (BLL). In a clean 3-layer architecture
+//            the layers are stacked like this:
+//
+//                UI  →  BLL  →  DAL  →  Database
+//
+//            Each layer should only know about the layer directly below it,
+//            and ONLY through interfaces — not through concrete classes.
+//
+//            The BLL (this file) should only know about:
+//              - NutritionMonitor.Models.Interfaces  (IMealLogRepository, etc.)
+//              - NutritionMonitor.Models.DTOs        (MealLogDto, etc.)
+//              - NutritionMonitor.Models.Entities    (MealLog, etc.)
+//
+//            It should NOT import NutritionMonitor.DAL.Repositories because:
+//              1. MealLogRepository is a concrete class — the BLL never uses it directly.
+//                 It only ever calls the interface IMealLogRepository.
+//              2. If you ever swap SQLite for PostgreSQL and rename or replace
+//                 MealLogRepository, this import would break even though the
+//                 BLL logic itself didn't change at all.
+//              3. It creates a hidden tight coupling between layers that defeats
+//                 the entire purpose of having interfaces.
+//
+//            The import was harmless at compile time only because the concrete
+//            class happened to exist. The fix is simply removing the line —
+//            zero logic changes needed because the code already used interfaces.
+
 using NutritionMonitor.Models.DTOs;
 using NutritionMonitor.Models.Entities;
 using NutritionMonitor.Models.Interfaces;
@@ -10,7 +41,9 @@ public class MealLogService : IMealLogService
     private readonly IMealLogRepository _mealLogRepository;
     private readonly IStudentRepository _studentRepository;
 
-    public MealLogService(IMealLogRepository mealLogRepository, IStudentRepository studentRepository)
+    public MealLogService(
+        IMealLogRepository mealLogRepository,
+        IStudentRepository studentRepository)
     {
         _mealLogRepository = mealLogRepository;
         _studentRepository = studentRepository;
@@ -22,13 +55,16 @@ public class MealLogService : IMealLogService
         return logs.Select(MapToDto);
     }
 
-    public async Task<IEnumerable<MealLogDto>> GetLogsByStudentAndDateRangeAsync(int studentId, DateTime from, DateTime to)
+    public async Task<IEnumerable<MealLogDto>> GetLogsByStudentAndDateRangeAsync(
+        int studentId, DateTime from, DateTime to)
     {
-        var logs = await _mealLogRepository.GetByStudentIdAndDateRangeAsync(studentId, from, to);
+        var logs = await _mealLogRepository
+            .GetByStudentIdAndDateRangeAsync(studentId, from, to);
         return logs.Select(MapToDto);
     }
 
-    public async Task<IEnumerable<MealLogDto>> GetLogsByDateRangeAsync(DateTime from, DateTime to)
+    public async Task<IEnumerable<MealLogDto>> GetLogsByDateRangeAsync(
+        DateTime from, DateTime to)
     {
         var logs = await _mealLogRepository.GetByDateRangeAsync(from, to);
         return logs.Select(MapToDto);
@@ -88,24 +124,42 @@ public class MealLogService : IMealLogService
             : (false, "Meal log not found.");
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Validation
+    // ─────────────────────────────────────────────────────────────────────────
+
     private static (bool IsValid, string Message) ValidateLog(MealLogDto dto)
     {
-        if (dto.StudentId <= 0) return (false, "Valid student is required.");
-        if (dto.LogDate == default) return (false, "Log date is required.");
-        if (dto.LogDate > DateTime.Today) return (false, "Log date cannot be in the future.");
-        if (string.IsNullOrWhiteSpace(dto.MealType)) return (false, "Meal type is required.");
-        if (dto.CaloriesKcal < 0) return (false, "Calories cannot be negative.");
-        if (dto.ProteinG < 0) return (false, "Protein cannot be negative.");
-        if (dto.CarbohydratesG < 0) return (false, "Carbohydrates cannot be negative.");
-        if (dto.FatsG < 0) return (false, "Fats cannot be negative.");
+        if (dto.StudentId <= 0)
+            return (false, "Valid student is required.");
+        if (dto.LogDate == default)
+            return (false, "Log date is required.");
+        if (dto.LogDate > DateTime.Today)
+            return (false, "Log date cannot be in the future.");
+        if (string.IsNullOrWhiteSpace(dto.MealType))
+            return (false, "Meal type is required.");
+        if (dto.CaloriesKcal < 0)
+            return (false, "Calories cannot be negative.");
+        if (dto.ProteinG < 0)
+            return (false, "Protein cannot be negative.");
+        if (dto.CarbohydratesG < 0)
+            return (false, "Carbohydrates cannot be negative.");
+        if (dto.FatsG < 0)
+            return (false, "Fats cannot be negative.");
         return (true, string.Empty);
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Mapping
+    // ─────────────────────────────────────────────────────────────────────────
 
     private static MealLogDto MapToDto(MealLog m) => new()
     {
         Id = m.Id,
         StudentId = m.StudentId,
-        StudentName = m.Student != null ? $"{m.Student.FirstName} {m.Student.LastName}" : string.Empty,
+        StudentName = m.Student != null
+                            ? $"{m.Student.FirstName} {m.Student.LastName}"
+                            : string.Empty,
         LogDate = m.LogDate,
         MealType = m.MealType,
         CaloriesKcal = m.CaloriesKcal,

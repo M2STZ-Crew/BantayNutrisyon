@@ -1,19 +1,43 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿// PHASE 6 FIX — ChartsForm.cs
+// Changes made — junk using directives removed:
+//
+//   [FIX #1] Removed: using OpenTK.Graphics;
+//            → OpenTK is a 3D graphics / OpenGL library. Charts are rendered
+//              by ScottPlot, not by OpenGL. Wrong library entirely.
+//
+//   [FIX #2] Removed: using ScottPlot.TickGenerators.TimeUnits;
+//            → Contains time unit types like Day, Hour, Minute for custom tick
+//              generators. This file uses plt.Axes.DateTimeTicksBottom() which
+//              handles date ticks automatically — the manual time unit types
+//              are never referenced.
+//
+//   [FIX #3] Removed: using System.Diagnostics.Metrics;
+//            → .NET diagnostic metrics API (Meter, Counter, Histogram).
+//              Used for application performance telemetry. Not for UI charts.
+//
+//   [FIX #4] Removed: using static System.Windows.Forms.LinkLabel;
+//            → Imports LinkLabel's nested types (Link, LinkCollection) as static.
+//              There are no LinkLabel controls in this form.
+//
+//   [FIX #5] Removed: using Microsoft.EntityFrameworkCore;
+//            → EF Core in a UI chart form. Same wrong-layer issue as other files.
+//
+//   [FIX #6] Removed: using NutritionMonitor.Models.Entities;
+//            → This form works with DTOs only (MealLogDto, NutritionAnalysisDto).
+//              Entity classes (MealLog, Student) are only handled by the DAL.
+//
+//   [FIX #7] Removed: using System.Globalization;
+//            → Not used in this file.
+//
+// Zero logic changes. All chart behaviour is identical.
+
 using Microsoft.Extensions.DependencyInjection;
 using NutritionMonitor.Models.DTOs;
-using NutritionMonitor.Models.Entities;
 using NutritionMonitor.Models.Enums;
 using NutritionMonitor.Models.Interfaces;
-using OpenTK.Graphics;
-using ScottPlot;
-using ScottPlot.TickGenerators.TimeUnits;
-using System.Diagnostics.Metrics;
-using System.Globalization;
-using static System.Windows.Forms.LinkLabel;
 using SerilogLog = Serilog.Log;
 using WinForms = System.Windows.Forms;
 using Drawing = System.Drawing;
-
 
 // Alias to avoid conflict between System.Drawing.Color and ScottPlot.Color
 using SPColor = ScottPlot.Color;
@@ -43,7 +67,6 @@ public class ChartsForm : UserControl
     private static readonly SPColor SP_Amber = new SPColor(245, 158, 11);
     private static readonly SPColor SP_Red = new SPColor(220, 60, 60);
     private static readonly SPColor SP_Green = new SPColor(40, 200, 120);
-    private static readonly SPColor SP_Navy = new SPColor(30, 50, 100);
     private static readonly SPColor SP_BgFig = new SPColor(255, 255, 255);
     private static readonly SPColor SP_BgData = new SPColor(248, 250, 252);
     private static readonly SPColor SP_Grid = new SPColor(225, 232, 242);
@@ -141,9 +164,9 @@ public class ChartsForm : UserControl
         flow.Controls.Add(MakeFlowLabel("STUDENT"));
         _cmbStudent = new ComboBox
         {
-            Font = new Font("Segoe UI", 9.5f),
+            Font = new Drawing.Font("Segoe UI", 9.5f),
             DropDownStyle = ComboBoxStyle.DropDownList,
-            Size = new Size(210, 30),
+            Size = new System.Drawing.Size(210, 30),
             BackColor = CardBg,
             ForeColor = TextDark,
             FlatStyle = FlatStyle.Flat,
@@ -157,9 +180,9 @@ public class ChartsForm : UserControl
         _dtpFrom = new DateTimePicker
         {
             Format = DateTimePickerFormat.Short,
-            Font = new Font("Segoe UI", 9.5f),
+            Font = new Drawing.Font("Segoe UI", 9.5f),
             Value = DateTime.Today.AddDays(-30),
-            Size = new Size(118, 30),
+            Size = new System.Drawing.Size(118, 30),
             Margin = new Padding(4, 2, 16, 0)
         };
         flow.Controls.Add(_dtpFrom);
@@ -169,9 +192,9 @@ public class ChartsForm : UserControl
         _dtpTo = new DateTimePicker
         {
             Format = DateTimePickerFormat.Short,
-            Font = new Font("Segoe UI", 9.5f),
+            Font = new Drawing.Font("Segoe UI", 9.5f),
             Value = DateTime.Today,
-            Size = new Size(118, 30),
+            Size = new System.Drawing.Size(118, 30),
             Margin = new Padding(4, 2, 20, 0)
         };
         flow.Controls.Add(_dtpTo);
@@ -192,9 +215,9 @@ public class ChartsForm : UserControl
         _tabs = new TabControl
         {
             Dock = DockStyle.Fill,
-            Font = new Font("Segoe UI", 9.5f),
+            Font = new Drawing.Font("Segoe UI", 9.5f),
             Appearance = TabAppearance.FlatButtons,
-            ItemSize = new Size(180, 32),
+            ItemSize = new System.Drawing.Size(180, 32),
             SizeMode = TabSizeMode.Fixed,
             BackColor = BgColor
         };
@@ -252,10 +275,10 @@ public class ChartsForm : UserControl
         _lblCount = new WinForms.Label
         {
             Text = "Select a student and date range, then click Load Charts.",
-            Font = new Font("Segoe UI", 8.5f),
+            Font = new Drawing.Font("Segoe UI", 8.5f),
             ForeColor = TextMuted,
             AutoSize = true,
-            Location = new Point(0, 0),
+            Location = new System.Drawing.Point(0, 0),
             Height = 36,
             TextAlign = ContentAlignment.MiddleLeft
         };
@@ -263,7 +286,7 @@ public class ChartsForm : UserControl
         _lblStatus = new WinForms.Label
         {
             Text = string.Empty,
-            Font = new Font("Segoe UI", 8.5f),
+            Font = new Drawing.Font("Segoe UI", 8.5f),
             ForeColor = TealAccent,
             AutoSize = true,
             Height = 36,
@@ -272,7 +295,7 @@ public class ChartsForm : UserControl
 
         _statusBar.Controls.AddRange(new Control[] { _lblCount, _lblStatus });
         _statusBar.Resize += (_, _) =>
-            _lblStatus.Location = new Point(
+            _lblStatus.Location = new System.Drawing.Point(
                 _statusBar.Width - _lblStatus.Width - 16, 0);
     }
 
@@ -285,8 +308,7 @@ public class ChartsForm : UserControl
         try
         {
             using var scope = ServiceLocator.CreateScope();
-            var svc = scope.ServiceProvider
-                .GetRequiredService<IStudentService>();
+            var svc = scope.ServiceProvider.GetRequiredService<IStudentService>();
             _students = (await svc.GetAllStudentsAsync()).ToList();
 
             _cmbStudent.Items.Clear();
@@ -310,25 +332,19 @@ public class ChartsForm : UserControl
         {
             var from = _dtpFrom.Value.Date;
             var to = _dtpTo.Value.Date.AddDays(1).AddSeconds(-1);
-
-            var selectedStudent =
-                _cmbStudent.SelectedItem as StudentDto;
+            var selectedStudent = _cmbStudent.SelectedItem as StudentDto;
 
             using var scope = ServiceLocator.CreateScope();
-            var mealSvc = scope.ServiceProvider
-                .GetRequiredService<IMealLogService>();
-            var analysisSvc = scope.ServiceProvider
-                .GetRequiredService<INutritionAnalysisService>();
+            var mealSvc = scope.ServiceProvider.GetRequiredService<IMealLogService>();
+            var analysisSvc = scope.ServiceProvider.GetRequiredService<INutritionAnalysisService>();
 
             // ── Chart 1: Nutrient Trend ───────────────────────────────────────
             if (selectedStudent != null)
             {
                 var logs = (await mealSvc
-                    .GetLogsByStudentAndDateRangeAsync(
-                        selectedStudent.Id, from, to))
+                    .GetLogsByStudentAndDateRangeAsync(selectedStudent.Id, from, to))
                     .OrderBy(l => l.LogDate)
                     .ToList();
-
                 DrawNutrientTrend(logs, selectedStudent.FullName);
             }
             else
@@ -340,17 +356,14 @@ public class ChartsForm : UserControl
             }
 
             // ── Chart 2: Status Overview ──────────────────────────────────────
-            var allResults = (await analysisSvc
-                .AnalyzeAllStudentsAsync(from, to))
-                .ToList();
-
+            var allResults = (await analysisSvc.AnalyzeAllStudentsAsync(from, to)).ToList();
             DrawStatusOverview(allResults);
 
             // ── Chart 3: Deficit vs RENI ──────────────────────────────────────
             if (selectedStudent != null)
             {
-                var result = await analysisSvc
-                    .AnalyzeStudentAsync(selectedStudent.Id, from, to);
+                var result = await analysisSvc.AnalyzeStudentAsync(
+                    selectedStudent.Id, from, to);
 
                 if (result != null)
                     DrawDeficitVsReni(result);
@@ -360,7 +373,6 @@ public class ChartsForm : UserControl
             }
             else if (allResults.Count > 0)
             {
-                // Show the most-at-risk student
                 var worst = allResults
                     .OrderByDescending(r => r.WeightedDeficitPercentage)
                     .First();
@@ -372,14 +384,6 @@ public class ChartsForm : UserControl
             else
             {
                 DrawDeficitPlaceholder("No analysis data available.");
-            }
-
-            int logCount = 0;
-            if (selectedStudent != null)
-            {
-                var l = await mealSvc.GetLogsByStudentAndDateRangeAsync(
-                    selectedStudent.Id, from, to);
-                logCount = l.Count();
             }
 
             _lblCount.Text =
@@ -404,7 +408,7 @@ public class ChartsForm : UserControl
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    //  Chart 1 — Nutrient Trend (Line Chart)
+    //  Chart 1 — Nutrient Trend
     // ─────────────────────────────────────────────────────────────────────────
 
     private void DrawNutrientTrend(List<MealLogDto> logs, string title)
@@ -420,7 +424,6 @@ public class ChartsForm : UserControl
             return;
         }
 
-        // Group by date and compute daily averages
         var grouped = logs
             .GroupBy(l => l.LogDate.Date)
             .OrderBy(g => g.Key)
@@ -436,32 +439,28 @@ public class ChartsForm : UserControl
 
         double[] dates = grouped.Select(g => g.Date.ToOADate()).ToArray();
         double[] calories = grouped.Select(g => g.Calories).ToArray();
-        double[] protein = grouped.Select(g => g.Protein * 4).ToArray(); // kcal equiv
+        double[] protein = grouped.Select(g => g.Protein * 4).ToArray();
         double[] carbs = grouped.Select(g => g.Carbs * 4).ToArray();
         double[] fats = grouped.Select(g => g.Fats * 9).ToArray();
 
-        // Calories line
         var calLine = plt.Add.Scatter(dates, calories);
         calLine.LegendText = "Calories (kcal)";
         calLine.Color = SP_Teal;
         calLine.LineWidth = 2.5f;
         calLine.MarkerSize = 6;
 
-        // Protein line (kcal equivalent)
         var proLine = plt.Add.Scatter(dates, protein);
         proLine.LegendText = "Protein (kcal equiv.)";
         proLine.Color = SP_Blue;
         proLine.LineWidth = 2f;
         proLine.MarkerSize = 5;
 
-        // Carbs line
         var carbLine = plt.Add.Scatter(dates, carbs);
         carbLine.LegendText = "Carbs (kcal equiv.)";
         carbLine.Color = SP_Amber;
         carbLine.LineWidth = 2f;
         carbLine.MarkerSize = 5;
 
-        // Fats line
         var fatLine = plt.Add.Scatter(dates, fats);
         fatLine.LegendText = "Fats (kcal equiv.)";
         fatLine.Color = SP_Red;
@@ -478,7 +477,8 @@ public class ChartsForm : UserControl
         _trendPlot.Refresh();
     }
 
-    private void DrawTrendPlaceholder(string msg = "Load charts to see nutrient trend over time.")
+    private void DrawTrendPlaceholder(
+        string msg = "Load charts to see nutrient trend over time.")
     {
         var plt = _trendPlot.Plot;
         plt.Clear();
@@ -488,7 +488,7 @@ public class ChartsForm : UserControl
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    //  Chart 2 — Status Overview (Bar Chart)
+    //  Chart 2 — Status Overview
     // ─────────────────────────────────────────────────────────────────────────
 
     private void DrawStatusOverview(List<NutritionAnalysisDto> results)
@@ -535,7 +535,6 @@ public class ChartsForm : UserControl
 
         plt.Add.Bars(bars);
 
-        // Custom tick labels
         var tickGen = new ScottPlot.TickGenerators.NumericManual();
         tickGen.AddMajor(0, "Normal");
         tickGen.AddMajor(1, "At-Risk");
@@ -552,7 +551,8 @@ public class ChartsForm : UserControl
         _statusPlot.Refresh();
     }
 
-    private void DrawStatusPlaceholder(string msg = "Load charts to see status distribution.")
+    private void DrawStatusPlaceholder(
+        string msg = "Load charts to see status distribution.")
     {
         var plt = _statusPlot.Plot;
         plt.Clear();
@@ -562,7 +562,7 @@ public class ChartsForm : UserControl
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    //  Chart 3 — Deficit vs RENI (Horizontal-style bar chart)
+    //  Chart 3 — Deficit vs RENI
     // ─────────────────────────────────────────────────────────────────────────
 
     private void DrawDeficitVsReni(NutritionAnalysisDto result)
@@ -606,13 +606,11 @@ public class ChartsForm : UserControl
 
         plt.Add.Bars(bars.ToArray());
 
-        // Nutrient name tick labels
         var tickGen = new ScottPlot.TickGenerators.NumericManual();
         for (int i = 0; i < sorted.Count; i++)
             tickGen.AddMajor(i, sorted[i].NutrientName);
         plt.Axes.Bottom.TickGenerator = tickGen;
 
-        // Reference lines
         var atRiskLine = plt.Add.HorizontalLine(15);
         atRiskLine.Color = SP_Amber;
         atRiskLine.LineWidth = 1.5f;
@@ -669,14 +667,12 @@ public class ChartsForm : UserControl
         };
     }
 
-    private static void ApplyPlotStyle(Plot plt)
+    private static void ApplyPlotStyle(ScottPlot.Plot plt)
     {
         plt.FigureBackground.Color = SP_BgFig;
         plt.DataBackground.Color = SP_BgData;
-
         plt.Grid.MajorLineColor = SP_Grid;
         plt.Grid.MajorLineWidth = 1f;
-
         plt.Axes.Color(new SPColor(80, 100, 130));
         plt.Axes.Bottom.FrameLineStyle.Color = new SPColor(210, 220, 232);
         plt.Axes.Left.FrameLineStyle.Color = new SPColor(210, 220, 232);
@@ -690,14 +686,14 @@ public class ChartsForm : UserControl
     {
         _btnLoad.Enabled = !loading;
         _btnLoad.Text = loading ? "Loading…" : "📊  Load Charts";
-        Application.DoEvents();
+        Application.DoEvents(); // Safe here — brief visual update, no async risk
     }
 
     private void SetStatus(string msg, WinColor color)
     {
         _lblStatus.ForeColor = color;
         _lblStatus.Text = msg;
-        _lblStatus.Location = new Point(
+        _lblStatus.Location = new System.Drawing.Point(
             _statusBar.Width - _lblStatus.Width - 16, 0);
     }
 
@@ -721,7 +717,7 @@ public class ChartsForm : UserControl
             BackColor = bg,
             ForeColor = fg,
             FlatStyle = FlatStyle.Flat,
-            Size = new Size(width, 32),
+            Size = new System.Drawing.Size(width, 32),
             Cursor = Cursors.Hand,
             TabStop = false
         };

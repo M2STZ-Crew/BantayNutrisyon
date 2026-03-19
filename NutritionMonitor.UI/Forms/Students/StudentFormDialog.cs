@@ -1,12 +1,25 @@
-﻿// File Path: NutritionMonitor.UI/Forms/Students/StudentFormDialog.cs
-using Microsoft.EntityFrameworkCore;
+﻿// PHASE 6 FIX — StudentFormDialog.cs
+// Changes made — junk using directives removed:
+//
+//   [FIX #1] Removed: using Microsoft.EntityFrameworkCore;
+//            → EF Core belongs in DAL only. UI dialogs never touch it.
+//
+//   [FIX #2] Removed: using ScottPlot.Hatches;
+//            → ScottPlot is the charting library. StudentFormDialog is a
+//              data-entry form with no charts whatsoever.
+//
+//   [FIX #3] Removed: using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
+//            → EF Core internal logging. Not for UI forms.
+//
+//   [FIX #4] Removed: using static Microsoft.EntityFrameworkCore.DbLoggerCategory.Model;
+//            → Same as above — a sub-namespace of EF Core's internal logger.
+//
+// Zero logic changes. All form behaviour is identical.
+
 using Microsoft.Extensions.DependencyInjection;
 using NutritionMonitor.Models.DTOs;
 using NutritionMonitor.Models.Enums;
 using NutritionMonitor.Models.Interfaces;
-using ScottPlot.Hatches;
-using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
-using static Microsoft.EntityFrameworkCore.DbLoggerCategory.Model;
 using SerilogLog = Serilog.Log;
 using System.Drawing;
 using System.Windows.Forms;
@@ -69,7 +82,7 @@ public class StudentFormDialog : Form
 
         Text = _isEdit ? "Edit Student" : "Add New Student";
         Size = new Size(520, 560);
-        MinimumSize = new Size(480, 400); // Rule 8: Dialog minimum size
+        MinimumSize = new Size(480, 400);
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
@@ -77,7 +90,6 @@ public class StudentFormDialog : Form
         BackColor = BgColor;
         Font = new Font("Segoe UI", 9.5f);
 
-        // ROOT LAYOUT - Rule 2: TableLayoutPanel for vertical stacking
         var rootLayout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -87,9 +99,9 @@ public class StudentFormDialog : Form
             Padding = new Padding(0)
         };
         rootLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72f)); // Header
-        rootLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f)); // Body
-        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 60f)); // Footer
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72f));   // Header
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));   // Body
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 60f));   // Footer
 
         BuildHeader(rootLayout);
         BuildFormBody(rootLayout);
@@ -162,7 +174,6 @@ public class StudentFormDialog : Form
 
     private void BuildFormBody(TableLayoutPanel root)
     {
-        // Rule 7: Dialogs must wrap their body in a Panel with AutoScroll = true
         var scrollBody = new Panel
         {
             Dock = DockStyle.Fill,
@@ -181,19 +192,18 @@ public class StudentFormDialog : Form
         };
         _formTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
 
-        // Student Number
         var (lblNo, txtNo) = MakeField("Student Number", "e.g. 2024-00001");
-        _txtStudentNo = txtNo;
-
-        // First Name
         var (lblFirst, txtFirst) = MakeField("First Name", "e.g. Juan");
-        _txtFirstName = txtFirst;
-
-        // Last Name
         var (lblLast, txtLast) = MakeField("Last Name", "e.g. Dela Cruz");
-        _txtLastName = txtLast;
+        var (lblGrade, txtGrade) = MakeField("Grade Level", "e.g. Grade 7, Kinder 1");
+        var (lblSection, txtSection) = MakeField("Section", "e.g. Sampaguita");
 
-        // Date of Birth
+        _txtStudentNo = txtNo;
+        _txtFirstName = txtFirst;
+        _txtLastName = txtLast;
+        _txtGrade = txtGrade;
+        _txtSection = txtSection;
+
         var lblDob = MakeLabel("Date of Birth");
         _dtpDob = new DateTimePicker
         {
@@ -207,7 +217,6 @@ public class StudentFormDialog : Form
             Height = 36
         };
 
-        // Gender
         var lblGender = MakeLabel("Gender");
         _cmbGender = new ComboBox
         {
@@ -223,15 +232,6 @@ public class StudentFormDialog : Form
         _cmbGender.Items.AddRange(new object[] { "Male", "Female" });
         _cmbGender.SelectedIndex = 0;
 
-        // Grade Level
-        var (lblGrade, txtGrade) = MakeField("Grade Level", "e.g. Grade 7, Kinder 1");
-        _txtGrade = txtGrade;
-
-        // Section
-        var (lblSection, txtSection) = MakeField("Section", "e.g. Sampaguita");
-        _txtSection = txtSection;
-
-        // Error label
         _lblError = new Label
         {
             Text = string.Empty,
@@ -247,7 +247,6 @@ public class StudentFormDialog : Form
             Padding = new Padding(8, 0, 0, 0)
         };
 
-        // Stack all fields vertically using Rule 2 TableLayoutPanel config
         var rows = new (Control lbl, Control input)[]
         {
             (lblNo,      txtNo),
@@ -292,7 +291,6 @@ public class StudentFormDialog : Form
             e.Graphics.DrawLine(pen, 0, 0, footerPanel.Width, 0);
         };
 
-        // Rule 3: Use FlowLayoutPanel for horizontal toolbars/buttons
         var btnFlow = new FlowLayoutPanel
         {
             Dock = DockStyle.Right,
@@ -329,15 +327,13 @@ public class StudentFormDialog : Form
             Cursor = Cursors.Hand
         };
         _btnSave.FlatAppearance.BorderSize = 0;
-
         _btnSave.MouseEnter += (_, _) => _btnSave.BackColor = TealHover;
         _btnSave.MouseLeave += (_, _) => _btnSave.BackColor = TealAccent;
+        _btnSave.Click += async (_, _) => await SaveAsync();
 
         btnFlow.Controls.Add(_btnCancel);
         btnFlow.Controls.Add(_btnSave);
         footerPanel.Controls.Add(btnFlow);
-
-        _btnSave.Click += async (_, _) => await SaveAsync();
 
         root.Controls.Add(footerPanel, 0, 2);
     }
@@ -355,8 +351,6 @@ public class StudentFormDialog : Form
         _cmbGender.SelectedItem = _existing.Gender.ToString();
         _txtGrade.Text = _existing.GradeLevel;
         _txtSection.Text = _existing.Section;
-
-        // Lock student number in edit mode
         _txtStudentNo.ReadOnly = true;
         _txtStudentNo.BackColor = Color.FromArgb(242, 245, 250);
     }
@@ -383,8 +377,6 @@ public class StudentFormDialog : Form
 
         _btnSave.Enabled = false;
         _btnSave.Text = "Saving…";
-
-        // Rule 11: Task.Yield() allows the UI string change to visibly render
         await Task.Yield();
 
         try
@@ -453,7 +445,7 @@ public class StudentFormDialog : Form
             PlaceholderText = placeholder,
             AutoSize = false,
             Height = 36,
-            Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top, // Rule 5
+            Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top,
             Margin = new Padding(0, 0, 0, 16)
         };
         return (lbl, txt);

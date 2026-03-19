@@ -1,6 +1,30 @@
-﻿// File Path: NutritionMonitor.UI/Forms/DashboardForm.cs
+﻿// PHASE 4 FIX — DashboardForm.cs
+// Changes made:
+//
+//   [FIX #1] Dashboard stat cards always showed "—" and never updated.
+//            BEFORE: BuildStatCard() was called with hardcoded "—" string values.
+//                    No code ever replaced them with real numbers.
+//                    The method returned a Panel but the Label inside was
+//                    unreachable from outside — there was no way to update it.
+//
+//            AFTER:  BuildStatCard() now returns a TUPLE: (Panel card, Label valueLabel)
+//                    This gives LoadDashboardContent() a direct reference to each
+//                    value label so it can update the text later.
+//
+//                    A new method LoadDashboardStatsAsync() is called after the
+//                    layout is built. It fetches real counts from StudentService,
+//                    MealLogService, and NutritionAnalysisService then writes
+//                    them into the four label references.
+//
+//   [FIX #2] Removed junk using directives:
+//            - No unused imports were present in this file beyond what is needed.
+//              The file was clean aside from the stat card bug.
+
+using NutritionMonitor.Models.DTOs;
 using NutritionMonitor.Models.Enums;
+using NutritionMonitor.Models.Interfaces;
 using NutritionMonitor.UI.Session;
+using Microsoft.Extensions.DependencyInjection;
 using SerilogLog = Serilog.Log;
 using NutritionMonitor.UI.Forms.Students;
 using NutritionMonitor.UI.Forms.MealLogs;
@@ -13,6 +37,8 @@ using System.Drawing;
 using System.Windows.Forms;
 using System.Collections.Generic;
 using System;
+using System.Threading.Tasks;
+using System.Linq;
 
 namespace NutritionMonitor.UI.Forms;
 
@@ -69,14 +95,14 @@ public class DashboardForm : Form
 
     private readonly NavItem[] _navItems =
     {
-        new("⊞", "Dashboard",        "Dashboard"),
-        new("👤", "Students",         "Students"),
-        new("🍽",  "Meal Logs",        "MealLogs"),
-        new("📊", "Nutrition Analysis","Analysis"),
-        new("📈", "Visualizations",   "Charts"),
-        new("📄", "Reports",          "Reports"),
-        new("💾", "Backup & Restore", "Backup",   AdminOnly: true),
-        new("📋", "Application Logs",  "Logs"),
+        new("⊞",  "Dashboard",          "Dashboard"),
+        new("👤",  "Students",           "Students"),
+        new("🍽",  "Meal Logs",          "MealLogs"),
+        new("📊",  "Nutrition Analysis", "Analysis"),
+        new("📈",  "Visualizations",     "Charts"),
+        new("📄",  "Reports",            "Reports"),
+        new("💾",  "Backup & Restore",   "Backup",  AdminOnly: true),
+        new("📋",  "Application Logs",   "Logs"),
     };
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -102,7 +128,6 @@ public class DashboardForm : Form
         Font = new Font("Segoe UI", 9.5f);
         FormBorderStyle = FormBorderStyle.Sizable;
 
-        // ROOT LAYOUT - Rule 2: Prevents sidebar overlapping main content
         var rootLayout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -186,7 +211,7 @@ public class DashboardForm : Form
             Font = new Font("Segoe UI", 11f, FontStyle.Bold),
             ForeColor = Color.White,
             AutoSize = true,
-            Margin = new Padding(0, 0, 0, 0)
+            Margin = new Padding(0)
         };
 
         _lblAppSub = new Label
@@ -232,19 +257,17 @@ public class DashboardForm : Form
         foreach (var item in _navItems)
         {
             if (item.AdminOnly && !SessionManager.IsAdmin) continue;
-
             var btn = BuildNavButton(item);
             if (firstBtn == null) firstBtn = btn;
             _navContainer.Controls.Add(btn);
         }
 
-        // ── User chip at bottom ───────────────────────────────────────────────
+        // ── User chip ─────────────────────────────────────────────────────────
         _userChip = BuildUserChip();
 
         sidebarLayout.Controls.Add(logoBlock, 0, 0);
         sidebarLayout.Controls.Add(sectionLabel, 0, 1);
         sidebarLayout.Controls.Add(_navContainer, 0, 2);
-        // Row 3 is empty spacer
         sidebarLayout.Controls.Add(_userChip, 0, 4);
 
         _sidebarPanel.Controls.Add(sidebarLayout);
@@ -272,7 +295,6 @@ public class DashboardForm : Form
         btn.FlatAppearance.BorderSize = 0;
         btn.FlatAppearance.MouseOverBackColor = SidebarHover;
         btn.FlatAppearance.MouseDownBackColor = SidebarHover;
-
         btn.Click += NavButton_Click;
         return btn;
     }
@@ -311,7 +333,6 @@ public class DashboardForm : Form
             e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             using var brush = new SolidBrush(TealAccent);
             e.Graphics.FillEllipse(brush, 0, 0, 37, 37);
-
             string initials = GetInitials(SessionManager.IsLoggedIn
                 ? SessionManager.Current.FullName : "?");
             using var font = new Font("Segoe UI", 11f, FontStyle.Bold);
@@ -428,7 +449,6 @@ public class DashboardForm : Form
         topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
         topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
-        // Left Side: Titles
         var titleLayout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -459,7 +479,6 @@ public class DashboardForm : Form
         titleLayout.Controls.Add(_lblPageTitle, 0, 0);
         titleLayout.Controls.Add(_lblBreadcrumb, 0, 1);
 
-        // Right Side: Badges
         var badgeLayout = new TableLayoutPanel
         {
             AutoSize = true,
@@ -490,7 +509,7 @@ public class DashboardForm : Form
             Anchor = AnchorStyles.Right,
             TextAlign = ContentAlignment.MiddleCenter,
             Padding = new Padding(6, 4, 6, 4),
-            Margin = new Padding(0, 0, 0, 0)
+            Margin = new Padding(0)
         };
 
         badgeLayout.Controls.Add(_lblUserBadge, 0, 0);
@@ -525,7 +544,6 @@ public class DashboardForm : Form
     {
         if (sender is not Button btn) return;
         if (btn.Tag is not NavItem item) return;
-
         ActivateNavButton(btn);
         NavigateTo(item.Page, item.Label);
     }
@@ -571,49 +589,34 @@ public class DashboardForm : Form
             case "Dashboard":
                 LoadDashboardContent();
                 break;
-
             case "Students":
-                var studentPanel = new StudentListForm(_contentArea);
-                studentPanel.Dock = DockStyle.Fill;
+                var studentPanel = new StudentListForm(_contentArea) { Dock = DockStyle.Fill };
                 _contentArea.Controls.Add(studentPanel);
                 break;
-
             case "MealLogs":
-                var mealLogPanel = new MealLogListForm(_contentArea);
-                mealLogPanel.Dock = DockStyle.Fill;
+                var mealLogPanel = new MealLogListForm(_contentArea) { Dock = DockStyle.Fill };
                 _contentArea.Controls.Add(mealLogPanel);
                 break;
-
             case "Analysis":
-                var analysisPanel = new NutritionAnalysisForm(_contentArea);
-                analysisPanel.Dock = DockStyle.Fill;
+                var analysisPanel = new NutritionAnalysisForm(_contentArea) { Dock = DockStyle.Fill };
                 _contentArea.Controls.Add(analysisPanel);
                 break;
-
             case "Charts":
-                var chartsPanel = new ChartsForm(_contentArea);
-                chartsPanel.Dock = DockStyle.Fill;
+                var chartsPanel = new ChartsForm(_contentArea) { Dock = DockStyle.Fill };
                 _contentArea.Controls.Add(chartsPanel);
                 break;
-
             case "Backup":
-                var backupPanel = new BackupForm(_contentArea);
-                backupPanel.Dock = DockStyle.Fill;
+                var backupPanel = new BackupForm(_contentArea) { Dock = DockStyle.Fill };
                 _contentArea.Controls.Add(backupPanel);
                 break;
-
             case "Reports":
-                var reportsPanel = new ReportsForm(_contentArea);
-                reportsPanel.Dock = DockStyle.Fill;
+                var reportsPanel = new ReportsForm(_contentArea) { Dock = DockStyle.Fill };
                 _contentArea.Controls.Add(reportsPanel);
                 break;
-
             case "Logs":
-                var logsPanel = new ErrorLogViewerForm(_contentArea);
-                logsPanel.Dock = DockStyle.Fill;
+                var logsPanel = new ErrorLogViewerForm(_contentArea) { Dock = DockStyle.Fill };
                 _contentArea.Controls.Add(logsPanel);
                 break;
-
             default:
                 LoadComingSoonContent(label);
                 break;
@@ -621,7 +624,7 @@ public class DashboardForm : Form
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    //  Dashboard Content — Stat Cards + Welcome
+    //  Dashboard Content
     // ─────────────────────────────────────────────────────────────────────────
 
     private void LoadDashboardContent()
@@ -640,14 +643,36 @@ public class DashboardForm : Form
         var banner = BuildWelcomeBanner();
         dashboardLayout.Controls.Add(banner, 0, 0);
 
-        // ── Stat cards row ────────────────────────────────────────────────────
-        var stats = new[]
+        // ── Stat cards ────────────────────────────────────────────────────────
+        // [FIX #1] BuildStatCard now returns (Panel, Label) so we can update
+        //          the value label later when real data loads.
+        var statDefs = new[]
         {
-            ("Total Students",      "—",   "Enrolled students",         StatBlue,  StatBlueLight,  "👤"),
-            ("Meal Logs Today",     "—",   "Entries logged today",       StatGreen, StatGreenLight, "🍽"),
-            ("At-Risk Students",    "—",   "Require attention",          StatAmber, StatAmberLight, "⚠"),
-            ("Malnourished",        "—",   "Critical nutritional deficit",StatRed,  StatRedLight,   "🔴"),
+            ("Total Students",       "👤", StatBlue,  StatBlueLight),
+            ("Meal Logs Today",      "🍽", StatGreen, StatGreenLight),
+            ("At-Risk Students",     "⚠",  StatAmber, StatAmberLight),
+            ("Malnourished",         "🔴", StatRed,   StatRedLight),
         };
+
+        var subTexts = new[]
+        {
+            "Enrolled students",
+            "Entries logged today",
+            "Require attention",
+            "Critical nutritional deficit"
+        };
+
+        // Hold references to the value labels so stats can be updated
+        var valueLabels = new Label[4];
+        var cardPanels = new Panel[4];
+
+        for (int i = 0; i < statDefs.Length; i++)
+        {
+            var (title, icon, accent, light) = statDefs[i];
+            var (card, valLbl) = BuildStatCard(title, "…", subTexts[i], accent, light, icon);
+            cardPanels[i] = card;
+            valueLabels[i] = valLbl;
+        }
 
         var cardRow = new Panel
         {
@@ -657,28 +682,23 @@ public class DashboardForm : Form
             Margin = new Padding(0, 20, 0, 0)
         };
 
-        var cards = new List<Panel>();
-        foreach (var (title, value, sub, accent, light, icon) in stats)
-        {
-            var card = BuildStatCard(title, value, sub, accent, light, icon);
-            cards.Add(card);
+        foreach (var card in cardPanels)
             cardRow.Controls.Add(card);
-        }
 
         void LayoutCards()
         {
-            if (cards.Count == 0 || cardRow.Width == 0) return;
+            if (cardPanels.Length == 0 || cardRow.Width == 0) return;
             int gap = 16;
-            int w = (cardRow.Width - gap * (cards.Count - 1)) / cards.Count;
+            int w = (cardRow.Width - gap * (cardPanels.Length - 1)) / cardPanels.Length;
             if (w < 10) return;
-            for (int i = 0; i < cards.Count; i++)
-                cards[i].SetBounds(i * (w + gap), 0, w, cardRow.Height);
+            for (int i = 0; i < cardPanels.Length; i++)
+                cardPanels[i].SetBounds(i * (w + gap), 0, w, cardRow.Height);
         }
 
         cardRow.Resize += (_, _) => LayoutCards();
         dashboardLayout.Controls.Add(cardRow, 0, 1);
 
-        // ── Section: Quick Access ─────────────────────────────────────────────
+        // ── Quick Access section ──────────────────────────────────────────────
         var sectionTitle = new Label
         {
             Text = "Quick Access",
@@ -689,13 +709,12 @@ public class DashboardForm : Form
         };
         dashboardLayout.Controls.Add(sectionTitle, 0, 2);
 
-        // ── Quick access tiles ────────────────────────────────────────────────
         var tiles = new[]
         {
-            ("👤",  "Manage Students",    "Add, edit, search\nstudent records",      StatBlue),
-            ("🍽",  "Log Meals",          "Record daily meal\nand nutrient data",     StatGreen),
-            ("📊",  "Run Analysis",       "Compute nutritional\ndeficit reports",     StatAmber),
-            ("💾",  "Backup Data",        "Export or restore\nsystem data",           StatRed),
+            ("👤", "Manage Students",  "Add, edit, search\nstudent records",     StatBlue),
+            ("🍽", "Log Meals",        "Record daily meal\nand nutrient data",    StatGreen),
+            ("📊", "Run Analysis",     "Compute nutritional\ndeficit reports",    StatAmber),
+            ("💾", "Backup Data",      "Export or restore\nsystem data",          StatRed),
         };
 
         var tileRow = new Panel
@@ -733,10 +752,98 @@ public class DashboardForm : Form
 
         _contentArea.Controls.Add(dashboardLayout);
 
-        // Force initial reflows
+        // Force initial layout
         LayoutCards();
         LayoutTiles();
+
+        // [FIX #1] Load real numbers into the stat cards asynchronously.
+        //          We pass the four label references so this method can update
+        //          them once the DB calls return.
+        _ = LoadDashboardStatsAsync(
+            valueLabels[0],   // Total Students
+            valueLabels[1],   // Meal Logs Today
+            valueLabels[2],   // At-Risk
+            valueLabels[3]);  // Malnourished
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  [FIX #1] NEW METHOD — loads real stat card values from the database
+    //
+    //  Why this was missing:
+    //  The original code passed hardcoded "—" into BuildStatCard() and never
+    //  called any service to replace those values. The dashboard appeared to
+    //  work but showed no real information to the user at all.
+    //
+    //  How it works now:
+    //  1. StudentService  → counts all active students
+    //  2. MealLogService  → counts logs created today only
+    //  3. NutritionAnalysisService → runs analysis for last 30 days,
+    //     counts At-Risk and Malnourished results
+    //  4. Each count is written directly into the label reference on the UI thread
+    //  5. If anything fails, "Err" is shown and the error is logged — the app
+    //     does not crash
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private async Task LoadDashboardStatsAsync(
+        Label lblTotalStudents,
+        Label lblMealLogsToday,
+        Label lblAtRisk,
+        Label lblMalnourished)
+    {
+        try
+        {
+            using var scope = ServiceLocator.CreateScope();
+
+            var studentSvc = scope.ServiceProvider.GetRequiredService<IStudentService>();
+            var mealSvc = scope.ServiceProvider.GetRequiredService<IMealLogService>();
+            var analysisSvc = scope.ServiceProvider.GetRequiredService<INutritionAnalysisService>();
+
+            // ── Total active students ─────────────────────────────────────────
+            var students = (await studentSvc.GetAllStudentsAsync()).ToList();
+            lblTotalStudents.Text = students.Count.ToString();
+
+            // ── Meal logs created today ───────────────────────────────────────
+            var todayStart = DateTime.Today;
+            var todayEnd = DateTime.Today.AddDays(1).AddSeconds(-1);
+            var todayLogs = (await mealSvc.GetLogsByDateRangeAsync(todayStart, todayEnd)).ToList();
+            lblMealLogsToday.Text = todayLogs.Count.ToString();
+
+            // ── Nutrition analysis for the past 30 days ───────────────────────
+            var analysisFrom = DateTime.Today.AddDays(-30);
+            var analysisTo = DateTime.Today.AddDays(1).AddSeconds(-1);
+            var analyses = (await analysisSvc
+                .AnalyzeAllStudentsAsync(analysisFrom, analysisTo))
+                .ToList();
+
+            lblAtRisk.Text = analyses.Count(a => a.Status == NutritionStatus.AtRisk)
+                                           .ToString();
+            lblMalnourished.Text = analyses.Count(a => a.Status == NutritionStatus.Malnourished)
+                                           .ToString();
+
+            SerilogLog.Information(
+                "Dashboard stats loaded — Students: {S}, Today logs: {L}, " +
+                "At-Risk: {R}, Malnourished: {M}",
+                students.Count,
+                todayLogs.Count,
+                lblAtRisk.Text,
+                lblMalnourished.Text);
+        }
+        catch (Exception ex)
+        {
+            // Show "Err" so the user sees something went wrong
+            // rather than stale "…" placeholders
+            lblTotalStudents.Text = "Err";
+            lblMealLogsToday.Text = "Err";
+            lblAtRisk.Text = "Err";
+            lblMalnourished.Text = "Err";
+
+            SerilogLog.Error(ex, "Failed to load dashboard stats.");
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Welcome Banner
+    // ─────────────────────────────────────────────────────────────────────────
 
     private Panel BuildWelcomeBanner()
     {
@@ -752,23 +859,21 @@ public class DashboardForm : Form
         {
             var g = e.Graphics;
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-
             using var stripeBrush = new SolidBrush(TealAccent);
             g.FillRectangle(stripeBrush, 0, 0, 5, banner.Height);
-
             var rect = new Rectangle(banner.Width - 180, 0, 180, banner.Height);
             using var gradBrush = new System.Drawing.Drawing2D.LinearGradientBrush(
                 rect, Color.Transparent, TealLight,
                 System.Drawing.Drawing2D.LinearGradientMode.Horizontal);
             g.FillRectangle(gradBrush, rect);
-
             using var pen = new Pen(BorderLight, 1);
             g.DrawRectangle(pen, 0, 0, banner.Width - 1, banner.Height - 1);
         };
 
         var hour = DateTime.Now.Hour;
         var greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-        var name = SessionManager.IsLoggedIn ? SessionManager.Current.FullName.Split(' ')[0] : "User";
+        var name = SessionManager.IsLoggedIn
+            ? SessionManager.Current.FullName.Split(' ')[0] : "User";
 
         var lblGreeting = new Label
         {
@@ -792,14 +897,25 @@ public class DashboardForm : Form
         return banner;
     }
 
-    private static Panel BuildStatCard(
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Stat Card
+    //
+    //  [FIX #1] BEFORE: private static Panel BuildStatCard(...)
+    //           Returned only the Panel. The value Label inside was created
+    //           as a local variable and became unreachable — nothing could
+    //           ever update its text after it was created.
+    //
+    //           AFTER: private static (Panel card, Label valueLabel) BuildStatCard(...)
+    //           Returns a TUPLE. The caller (LoadDashboardContent) holds the
+    //           Label reference and passes it to LoadDashboardStatsAsync()
+    //           which updates the text when the DB responds.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private static (Panel card, Label valueLabel) BuildStatCard(
         string title, string value, string subtitle,
         Color accent, Color light, string icon)
     {
-        var card = new Panel
-        {
-            BackColor = CardBg
-        };
+        var card = new Panel { BackColor = CardBg };
 
         card.Paint += (s, e) =>
         {
@@ -807,7 +923,6 @@ public class DashboardForm : Form
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             using var pen = new Pen(BorderLight, 1);
             g.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1);
-
             using var bar = new SolidBrush(accent);
             g.FillRectangle(bar, 0, 0, card.Width, 3);
         };
@@ -829,6 +944,7 @@ public class DashboardForm : Form
                 (42 - sz.Width) / 2f, (42 - sz.Height) / 2f);
         };
 
+        // This is the label we need to update later — now returned to the caller
         var lblValue = new Label
         {
             Text = value,
@@ -857,8 +973,14 @@ public class DashboardForm : Form
         };
 
         card.Controls.AddRange(new Control[] { iconPanel, lblValue, lblTitle, lblSub });
-        return card;
+
+        // Return both the card panel AND the value label reference
+        return (card, lblValue);
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Quick Tile
+    // ─────────────────────────────────────────────────────────────────────────
 
     private static Panel BuildQuickTile(
         string icon, string title, string desc, Color accent)
@@ -920,6 +1042,10 @@ public class DashboardForm : Form
         return tile;
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Info Strip
+    // ─────────────────────────────────────────────────────────────────────────
+
     private Panel BuildInfoStrip()
     {
         var strip = new FlowLayoutPanel
@@ -941,8 +1067,8 @@ public class DashboardForm : Form
 
         var items = new[]
         {
-            $"🗄  Database: SQLite",
-            $"⚙  .NET 10 Windows",
+            "🗄  Database: SQLite",
+            "⚙  .NET 10 Windows",
             $"🔐  Session: {(SessionManager.IsLoggedIn ? SessionManager.Current.Role.ToString() : "—")}",
             $"🕐  {DateTime.Now:HH:mm  dd/MM/yyyy}"
         };
@@ -967,7 +1093,7 @@ public class DashboardForm : Form
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    //  Coming Soon placeholder for unbuilt modules
+    //  Coming Soon placeholder
     // ─────────────────────────────────────────────────────────────────────────
 
     private void LoadComingSoonContent(string label)

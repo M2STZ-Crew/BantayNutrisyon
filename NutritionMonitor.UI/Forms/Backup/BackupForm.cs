@@ -1,7 +1,12 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿// PHASE 1 FIX — BackupForm.cs
+// Changes made:
+//   [FIX #1] Removed: using static OpenTK.Graphics.OpenGL.GL;  ← wrong library, caused compile error
+//   [FIX #2] SetLoading() is now async and uses await Task.Yield() instead of Application.DoEvents()
+//            to prevent re-entrancy bugs (user double-clicking while operation runs)
+
+using Microsoft.Extensions.DependencyInjection;
 using NutritionMonitor.Models.Interfaces;
 using NutritionMonitor.UI.Session;
-using static OpenTK.Graphics.OpenGL.GL;
 using SerilogLog = Serilog.Log;
 
 namespace NutritionMonitor.UI.Forms.Backup;
@@ -118,11 +123,9 @@ public class BackupForm : UserControl
             var g = e.Graphics;
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
 
-            // Left accent bar
             using var bar = new SolidBrush(TealAccent);
             g.FillRectangle(bar, 0, 0, 5, _headerPanel.Height);
 
-            // Subtle right gradient
             var rect = new Rectangle(
                 _headerPanel.Width - 220, 0, 220, _headerPanel.Height);
             using var grad = new System.Drawing.Drawing2D.LinearGradientBrush(
@@ -130,7 +133,6 @@ public class BackupForm : UserControl
                 System.Drawing.Drawing2D.LinearGradientMode.Horizontal);
             g.FillRectangle(grad, rect);
 
-            // Bottom border
             using var pen = new Pen(BorderLight, 1);
             g.DrawLine(pen, 0, _headerPanel.Height - 1,
                 _headerPanel.Width, _headerPanel.Height - 1);
@@ -206,7 +208,6 @@ public class BackupForm : UserControl
 
         card.Paint += (s, e) => PaintCard(e.Graphics, card, TealAccent);
 
-        // Icon area
         var iconLbl = new Label
         {
             Text = "💾",
@@ -240,7 +241,6 @@ public class BackupForm : UserControl
             TextAlign = ContentAlignment.TopLeft
         };
 
-        // Path row
         var lblPathLabel = MakeFieldLabel("SAVE TO", new Point(20, 98));
 
         var pathRow = new Panel
@@ -270,10 +270,8 @@ public class BackupForm : UserControl
 
         _btnBrowseExport = MakeSecondaryButton("Browse…", 80);
         _btnBrowseExport.Dock = DockStyle.Right;
-
         pathRow.Controls.Add(_btnBrowseExport);
 
-        // Status label
         _lblExportStatus = new Label
         {
             Text = string.Empty,
@@ -285,15 +283,12 @@ public class BackupForm : UserControl
             TextAlign = ContentAlignment.MiddleLeft
         };
 
-        // Export button
         _btnExport = MakePrimaryButton("💾  Export Now", TealAccent, 160);
         _btnExport.Location = new Point(20, 185);
 
-        // Wire events
         _btnBrowseExport.Click += BrowseExportPath;
         _btnExport.Click += async (_, _) => await RunExportAsync();
 
-        // Anchor/resize
         card.Resize += (_, _) =>
         {
             int w = card.Width - 40;
@@ -359,7 +354,6 @@ public class BackupForm : UserControl
             TextAlign = ContentAlignment.TopLeft
         };
 
-        // Warning badge
         var warnPanel = new Panel
         {
             Location = new Point(20, 90),
@@ -385,7 +379,6 @@ public class BackupForm : UserControl
         };
         warnPanel.Controls.Add(warnLbl);
 
-        // Path row
         var lblPathLabel = MakeFieldLabel("LOAD FROM", new Point(20, 124));
 
         var pathRow = new Panel
@@ -417,7 +410,6 @@ public class BackupForm : UserControl
         _btnBrowseImport.Dock = DockStyle.Right;
         pathRow.Controls.Add(_btnBrowseImport);
 
-        // Status label
         _lblImportStatus = new Label
         {
             Text = string.Empty,
@@ -429,7 +421,6 @@ public class BackupForm : UserControl
             TextAlign = ContentAlignment.MiddleLeft
         };
 
-        // Import button
         _btnImport = MakePrimaryButton("📂  Restore Now", AmberColor, 160);
         _btnImport.Location = new Point(20, 210);
         _btnImport.MouseEnter += (_, _) =>
@@ -437,11 +428,9 @@ public class BackupForm : UserControl
         _btnImport.MouseLeave += (_, _) =>
             _btnImport.BackColor = AmberColor;
 
-        // Wire events
         _btnBrowseImport.Click += BrowseImportPath;
         _btnImport.Click += async (_, _) => await RunImportAsync();
 
-        // Anchor/resize
         card.Resize += (_, _) =>
         {
             int w = card.Width - 40;
@@ -645,12 +634,10 @@ public class BackupForm : UserControl
         _lblImportPath.ForeColor = TextDark;
         _lblImportStatus.Text = string.Empty;
 
-        // Show file info
         try
         {
             var fi = new FileInfo(_importPath);
-            LogActivity("Import",
-                $"File selected: {_importPath}");
+            LogActivity("Import", $"File selected: {_importPath}");
             LogActivity("Import",
                 $"File size: {fi.Length / 1024.0:F1} KB  |  " +
                 $"Modified: {fi.LastWriteTime:MMM dd, yyyy HH:mm}");
@@ -672,7 +659,9 @@ public class BackupForm : UserControl
             return;
         }
 
-        SetLoading(_btnExport, true, "Exporting…");
+        // [FIX #2] Was: SetLoading(_btnExport, true, "Exporting…") with Application.DoEvents()
+        //          Now: await SetLoadingAsync() uses Task.Yield() — safe, no re-entrancy risk
+        await SetLoadingAsync(_btnExport, true, "Exporting…");
         SetStatus("Exporting data…", TextMuted);
         LogActivity("Export", $"Starting export to: {_exportPath}");
 
@@ -706,8 +695,7 @@ public class BackupForm : UserControl
             }
             else
             {
-                SetCardStatus(_lblExportStatus,
-                    $"❌  {message}", DangerRed);
+                SetCardStatus(_lblExportStatus, $"❌  {message}", DangerRed);
                 SetStatus("Export failed.", DangerRed);
                 LogActivity("Export", $"❌ Failed: {message}");
             }
@@ -722,7 +710,7 @@ public class BackupForm : UserControl
         }
         finally
         {
-            SetLoading(_btnExport, false, "💾  Export Now");
+            await SetLoadingAsync(_btnExport, false, "💾  Export Now");
         }
     }
 
@@ -740,7 +728,6 @@ public class BackupForm : UserControl
             return;
         }
 
-        // Confirm before import
         var confirm = MessageBox.Show(
             "This will attempt to import all students and meal logs " +
             "from the selected backup file.\n\n" +
@@ -757,7 +744,8 @@ public class BackupForm : UserControl
             return;
         }
 
-        SetLoading(_btnImport, true, "Restoring…");
+        // [FIX #2] Same fix applied here — async SetLoadingAsync instead of DoEvents
+        await SetLoadingAsync(_btnImport, true, "Restoring…");
         SetStatus("Importing data…", TextMuted);
         LogActivity("Import", $"Starting import from: {_importPath}");
 
@@ -771,8 +759,7 @@ public class BackupForm : UserControl
 
             if (success)
             {
-                SetCardStatus(_lblImportStatus,
-                    $"✅  {message}", SuccessGreen);
+                SetCardStatus(_lblImportStatus, $"✅  {message}", SuccessGreen);
                 SetStatus("Restore complete.", TealAccent);
 
                 _lblLastAction.Text =
@@ -787,8 +774,7 @@ public class BackupForm : UserControl
             }
             else
             {
-                SetCardStatus(_lblImportStatus,
-                    $"❌  {message}", DangerRed);
+                SetCardStatus(_lblImportStatus, $"❌  {message}", DangerRed);
                 SetStatus("Import failed.", DangerRed);
                 LogActivity("Import", $"❌ Failed: {message}");
             }
@@ -803,7 +789,7 @@ public class BackupForm : UserControl
         }
         finally
         {
-            SetLoading(_btnImport, false, "📂  Restore Now");
+            await SetLoadingAsync(_btnImport, false, "📂  Restore Now");
         }
     }
 
@@ -817,7 +803,6 @@ public class BackupForm : UserControl
 
         string timestamp = DateTime.Now.ToString("HH:mm:ss");
 
-        // Color-code by category
         Color catColor = category switch
         {
             "Export" => TealAccent,
@@ -829,17 +814,14 @@ public class BackupForm : UserControl
 
         _rtbLog.SuspendLayout();
 
-        // Timestamp
         _rtbLog.SelectionStart = _rtbLog.TextLength;
         _rtbLog.SelectionLength = 0;
         _rtbLog.SelectionColor = LogMuted;
         _rtbLog.AppendText($"[{timestamp}] ");
 
-        // Category tag
         _rtbLog.SelectionColor = catColor;
         _rtbLog.AppendText($"[{category.ToUpperInvariant()}] ");
 
-        // Message
         _rtbLog.SelectionColor = LogText;
         _rtbLog.AppendText($"{message}\n");
 
@@ -851,16 +833,11 @@ public class BackupForm : UserControl
     //  Paint Helpers
     // ─────────────────────────────────────────────────────────────────────────
 
-    private static void PaintCard(
-        Graphics g, Panel card, Color accentColor)
+    private static void PaintCard(Graphics g, Panel card, Color accentColor)
     {
         g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-
-        // Top accent bar
         using var topBar = new SolidBrush(accentColor);
         g.FillRectangle(topBar, 0, 0, card.Width, 4);
-
-        // Border
         using var pen = new Pen(BorderLight, 1);
         g.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1);
     }
@@ -875,11 +852,20 @@ public class BackupForm : UserControl
         lbl.ForeColor = color;
     }
 
-    private void SetLoading(Button btn, bool loading, string label)
+    // [FIX #2] SetLoading is now async and uses await Task.Yield()
+    // BEFORE: private void SetLoading(Button btn, bool loading, string label)
+    //         { btn.Enabled = !loading; btn.Text = label; Application.DoEvents(); }
+    //
+    // WHY IT WAS WRONG: Application.DoEvents() processes all pending Windows messages
+    // immediately. This means if the user clicks the button again before the operation
+    // finishes, it starts a SECOND export/import on top of the first one. That corrupts
+    // your backup file or database. await Task.Yield() lets the UI refresh ONE frame
+    // safely without that risk.
+    private async Task SetLoadingAsync(Button btn, bool loading, string label)
     {
         btn.Enabled = !loading;
         btn.Text = label;
-        Application.DoEvents();
+        await Task.Yield(); // ✅ Safe single-frame UI refresh
     }
 
     private void SetStatus(string msg, Color color)
@@ -894,8 +880,7 @@ public class BackupForm : UserControl
     //  Factory Helpers
     // ─────────────────────────────────────────────────────────────────────────
 
-    private static Button MakePrimaryButton(
-        string text, Color bg, int width)
+    private static Button MakePrimaryButton(string text, Color bg, int width)
     {
         var btn = new Button
         {

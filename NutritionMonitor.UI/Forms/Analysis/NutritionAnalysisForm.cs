@@ -1,13 +1,33 @@
-﻿// File Path: NutritionMonitor.UI/Forms/Analysis/NutritionAnalysisForm.cs
+﻿// PHASE 6 FIX — NutritionAnalysisForm.cs
+// Changes made — junk using directives removed:
+//
+//   [FIX #1] Removed: using System.Runtime.ConstrainedExecution;
+//            → This namespace contains SafeHandle and CriticalFinalizerObject,
+//              which are used in low-level memory-safe unmanaged code.
+//              A nutrition monitoring form has absolutely no use for this.
+//
+//   [FIX #2] Removed: using System.Runtime.Intrinsics.X86;
+//            → This is for CPU-level SIMD vector instructions (SSE, AVX).
+//              Used in high-performance numerical computing. Not for WinForms.
+//
+//   [FIX #3] Removed: using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
+//            → EF Core internal logging categories. The UI layer never
+//              interacts with EF Core directly. This belongs in DAL only.
+//
+//   [FIX #4] Removed: using static System.Windows.Forms.VisualStyles.VisualStyleElement;
+//            → Provides static access to Windows visual theme element identifiers
+//              like VisualStyleElement.Button.PushButton. Not used anywhere
+//              in this file — all styling is done manually via Paint events.
+//
+//   [FIX #5] Removed: using System.Globalization;
+//            → CultureInfo, DateTimeFormatInfo etc. Not used in this file.
+//
+// Zero logic changes. All form behaviour is identical.
+
 using Microsoft.Extensions.DependencyInjection;
 using NutritionMonitor.Models.DTOs;
 using NutritionMonitor.Models.Enums;
 using NutritionMonitor.Models.Interfaces;
-using System.Globalization;
-using System.Runtime.ConstrainedExecution;
-using System.Runtime.Intrinsics.X86;
-using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 using System.Drawing;
 using System.Windows.Forms;
 using System.Collections.Generic;
@@ -135,7 +155,6 @@ public class NutritionAnalysisForm : UserControl
                 _filterPanel.Width, _filterPanel.Height - 1);
         };
 
-        // Rule 3: FlowLayoutPanel for horizontal filter bar
         var flow = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -145,7 +164,7 @@ public class NutritionAnalysisForm : UserControl
             Padding = new Padding(12, 10, 12, 8)
         };
 
-        // ── Student combo ──────────────────────────────────────────────────────
+        // Student combo
         var studentBlock = MakeFlowBlock("STUDENT", out var studentInner);
         _cmbStudent = new System.Windows.Forms.ComboBox
         {
@@ -159,7 +178,7 @@ public class NutritionAnalysisForm : UserControl
         };
         studentInner.Controls.Add(_cmbStudent);
 
-        // ── From date ──────────────────────────────────────────────────────────
+        // From date
         var fromBlock = MakeFlowBlock("FROM", out var fromInner);
         _dtpFrom = new DateTimePicker
         {
@@ -170,7 +189,7 @@ public class NutritionAnalysisForm : UserControl
         };
         fromInner.Controls.Add(_dtpFrom);
 
-        // ── To date ────────────────────────────────────────────────────────────
+        // To date
         var toBlock = MakeFlowBlock("TO", out var toInner);
         _dtpTo = new DateTimePicker
         {
@@ -181,21 +200,21 @@ public class NutritionAnalysisForm : UserControl
         };
         toInner.Controls.Add(_dtpTo);
 
-        // ── Spacer ─────────────────────────────────────────────────────────────
+        // Spacer
         var spacer = new Panel
         {
             Size = new Size(12, 40),
             BackColor = Color.Transparent
         };
 
-        // ── Buttons ────────────────────────────────────────────────────────────
+        // Buttons
         var btnBlock = new FlowLayoutPanel
         {
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
             AutoSize = true,
             BackColor = Color.Transparent,
-            Padding = new Padding(0, 18, 0, 0), // Push down to align with inputs
+            Padding = new Padding(0, 18, 0, 0),
             Margin = new Padding(0)
         };
 
@@ -227,7 +246,6 @@ public class NutritionAnalysisForm : UserControl
         _btnClear.Click += ClearResults;
     }
 
-    // ── Helper: labeled flow block ─────────────────────────────────────────────
     private static Panel MakeFlowBlock(string labelText, out Panel innerPanel)
     {
         var outer = new FlowLayoutPanel
@@ -294,10 +312,10 @@ public class NutritionAnalysisForm : UserControl
 
         var items = new[]
         {
-            ("📋", "Total Analyzed",  _lblTotalAnalyzed, Color.FromArgb(150, 180, 220)),
-            ("✅", "Normal",          _lblNormalCount,   NormalGreen),
-            ("⚠",  "At-Risk",         _lblAtRiskCount,   AmberColor),
-            ("🔴", "Malnourished",    _lblMalCount,      DangerRed),
+            ("📋", "Total Analyzed", _lblTotalAnalyzed, Color.FromArgb(150, 180, 220)),
+            ("✅", "Normal",         _lblNormalCount,   NormalGreen),
+            ("⚠",  "At-Risk",        _lblAtRiskCount,   AmberColor),
+            ("🔴", "Malnourished",   _lblMalCount,      DangerRed),
         };
 
         foreach (var (icon, title, valLbl, color) in items)
@@ -352,7 +370,6 @@ public class NutritionAnalysisForm : UserControl
 
     private void BuildSplitPane()
     {
-        // Rule 6: Strictly defer Splitter sizes to safe initialization methods
         _splitMain = new SplitContainer
         {
             Dock = DockStyle.Fill,
@@ -389,7 +406,6 @@ public class NutritionAnalysisForm : UserControl
         }
         catch (InvalidOperationException) { }
     }
-
 
     // ── Student Results Grid (left pane) ──────────────────────────────────────
 
@@ -521,7 +537,7 @@ public class NutritionAnalysisForm : UserControl
         {
             Size = new Size(380, 160),
             BackColor = CardBg,
-            Anchor = AnchorStyles.None // Natural centering
+            Anchor = AnchorStyles.None
         };
 
         card.Paint += (s, e) =>
@@ -742,7 +758,6 @@ public class NutritionAnalysisForm : UserControl
     {
         _gridStudents.Rows.Clear();
 
-        // Sort: Malnourished first, then At-Risk, then Normal
         var sorted = results
             .OrderByDescending(r => (int)r.Status)
             .ThenByDescending(r => r.WeightedDeficitPercentage)
@@ -792,7 +807,6 @@ public class NutritionAnalysisForm : UserControl
     {
         _detailPanel.Controls.Clear();
 
-        // Rule 2: Root stacking layout for detail view
         var rootTable = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
@@ -857,7 +871,7 @@ public class NutritionAnalysisForm : UserControl
         var lblMeta = new Label
         {
             Text = $"Age {result.Age}  ·  {result.Gender}  ·  " +
-                   $"{result.Period.From:MMM dd} – {result.Period.To:MMM dd, yyyy}",
+                        $"{result.Period.From:MMM dd} – {result.Period.To:MMM dd, yyyy}",
             Font = new Font("Segoe UI", 8.5f),
             ForeColor = TextMuted,
             AutoSize = true,
@@ -930,7 +944,7 @@ public class NutritionAnalysisForm : UserControl
             avgLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20f));
 
         avgLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        avgLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f)); // flexible space
+        avgLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
         avgLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         var lblAvgTitle = new Label
@@ -946,11 +960,11 @@ public class NutritionAnalysisForm : UserControl
 
         var avgItems = new[]
         {
-            ($"🔥 {result.AvgCalories:F0} kcal",   "Calories"),
-            ($"💪 {result.AvgProtein:F1}g",         "Protein"),
-            ($"🌾 {result.AvgCarbohydrates:F1}g",   "Carbs"),
-            ($"🧈 {result.AvgFats:F1}g",            "Fats"),
-            ($"🥦 {result.AvgFiber:F1}g",           "Fiber"),
+            ($"🔥 {result.AvgCalories:F0} kcal", "Calories"),
+            ($"💪 {result.AvgProtein:F1}g",       "Protein"),
+            ($"🌾 {result.AvgCarbohydrates:F1}g",  "Carbs"),
+            ($"🧈 {result.AvgFats:F1}g",           "Fats"),
+            ($"🥦 {result.AvgFiber:F1}g",          "Fiber"),
         };
 
         for (int i = 0; i < avgItems.Length; i++)
@@ -980,7 +994,7 @@ public class NutritionAnalysisForm : UserControl
         avgCard.Controls.Add(avgLayout);
         rootTable.Controls.Add(avgCard, 0, row++);
 
-        // ── Deficit breakdown card ────────────────────────────────────────────
+        // ── Deficit breakdown ─────────────────────────────────────────────────
         if (result.Deficits.Count > 0)
         {
             AddRow();
@@ -1002,7 +1016,7 @@ public class NutritionAnalysisForm : UserControl
             }
         }
 
-        // ── Reni reference note ───────────────────────────────────────────────
+        // ── RENI reference note ───────────────────────────────────────────────
         AddRow();
         var refNote = new Label
         {
@@ -1093,7 +1107,8 @@ public class NutritionAnalysisForm : UserControl
         track.Controls.Add(fill);
         track.Resize += (_, _) =>
         {
-            fill.Width = (int)Math.Min(track.Width, track.Width * (deficit.DeficitPercentage / 100.0));
+            fill.Width = (int)Math.Min(
+                track.Width, track.Width * (deficit.DeficitPercentage / 100.0));
         };
 
         table.SetRowSpan(track, 2);
@@ -1148,8 +1163,6 @@ public class NutritionAnalysisForm : UserControl
         _btnAnalyzeAll.Enabled = !loading;
         _btnAnalyze.Text = loading ? "Analyzing…" : "▶  Analyze Student";
         _btnAnalyzeAll.Text = loading ? "Please wait…" : "▶▶  Analyze All";
-
-        // Rule 11: Task.Yield() allows the UI string change to visibly render
         await Task.Yield();
     }
 

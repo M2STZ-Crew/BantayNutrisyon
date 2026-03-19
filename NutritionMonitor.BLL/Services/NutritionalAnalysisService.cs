@@ -1,4 +1,32 @@
-﻿using NutritionMonitor.DAL.Repositories;
+﻿// PHASE 5 FIX — NutritionAnalysisService.cs
+// Changes made:
+//
+//   [FIX #1] Removed: using NutritionMonitor.DAL.Repositories;
+//
+//            SAME REASON AS MealLogService.cs:
+//
+//            This is the Business Logic Layer. It should never import
+//            concrete repository classes from the DAL.
+//
+//            Think of it like this using a real-world analogy:
+//
+//            Imagine a DOCTOR (BLL) who needs to read a patient's records.
+//            The doctor doesn't care WHETHER the records are stored in a
+//            filing cabinet, a computer, or a cloud server (DAL implementation).
+//            The doctor only knows there's a "records desk" (interface) they
+//            can ask. Who runs that desk and how is none of the doctor's business.
+//
+//            By importing NutritionMonitor.DAL.Repositories, the BLL was
+//            peeking behind the curtain at the filing cabinet directly.
+//            That breaks the separation of concerns.
+//
+//            The fix: remove the import. The constructor still receives
+//            IStudentRepository and IMealLogRepository — those are the
+//            interfaces defined in Models, which BLL is allowed to use.
+//            The concrete classes (StudentRepository, MealLogRepository)
+//            are wired up in ServiceLocator.cs, which is the only place
+//            that should know about them.
+
 using NutritionMonitor.Models.DTOs;
 using NutritionMonitor.Models.Enums;
 using NutritionMonitor.Models.Interfaces;
@@ -10,23 +38,32 @@ public class NutritionAnalysisService : INutritionAnalysisService
     private readonly IStudentRepository _studentRepository;
     private readonly IMealLogRepository _mealLogRepository;
 
-    public NutritionAnalysisService(IStudentRepository studentRepository, IMealLogRepository mealLogRepository)
+    public NutritionAnalysisService(
+        IStudentRepository studentRepository,
+        IMealLogRepository mealLogRepository)
     {
         _studentRepository = studentRepository;
         _mealLogRepository = mealLogRepository;
     }
 
-    public async Task<NutritionAnalysisDto?> AnalyzeStudentAsync(int studentId, DateTime from, DateTime to)
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Public API
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public async Task<NutritionAnalysisDto?> AnalyzeStudentAsync(
+        int studentId, DateTime from, DateTime to)
     {
         var student = await _studentRepository.GetByIdAsync(studentId);
         if (student == null) return null;
 
-        var logs = (await _mealLogRepository.GetByStudentIdAndDateRangeAsync(studentId, from, to)).ToList();
+        var logs = (await _mealLogRepository
+            .GetByStudentIdAndDateRangeAsync(studentId, from, to))
+            .ToList();
+
         if (logs.Count == 0) return null;
 
         int age = CalculateAge(student.DateOfBirth);
         var reni = GetReniValues(age, student.Gender);
-        int logCount = logs.Count;
 
         var dto = new NutritionAnalysisDto
         {
@@ -49,6 +86,7 @@ public class NutritionAnalysisService : INutritionAnalysisService
         };
 
         dto.Deficits = CalculateDeficits(dto, reni);
+
         dto.WeightedDeficitPercentage = dto.Deficits.Count > 0
             ? dto.Deficits.Average(d => d.DeficitPercentage)
             : 0;
@@ -63,7 +101,8 @@ public class NutritionAnalysisService : INutritionAnalysisService
         return dto;
     }
 
-    public async Task<IEnumerable<NutritionAnalysisDto>> AnalyzeAllStudentsAsync(DateTime from, DateTime to)
+    public async Task<IEnumerable<NutritionAnalysisDto>> AnalyzeAllStudentsAsync(
+        DateTime from, DateTime to)
     {
         var students = await _studentRepository.GetAllActiveAsync();
         var results = new List<NutritionAnalysisDto>();
@@ -77,14 +116,21 @@ public class NutritionAnalysisService : INutritionAnalysisService
         return results;
     }
 
-    private static List<NutrientDeficitDetail> CalculateDeficits(NutritionAnalysisDto dto, ReniValues reni)
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Deficit Calculation
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private static List<NutrientDeficitDetail> CalculateDeficits(
+        NutritionAnalysisDto dto, ReniValues reni)
     {
         var deficits = new List<NutrientDeficitDetail>();
 
         void AddDeficit(string name, double actual, double recommended, string unit)
         {
             if (recommended <= 0) return;
-            double deficit = Math.Max(0, (recommended - actual) / recommended * 100);
+            double deficit = Math.Max(0,
+                (recommended - actual) / recommended * 100);
+
             deficits.Add(new NutrientDeficitDetail
             {
                 NutrientName = name,
@@ -107,9 +153,13 @@ public class NutritionAnalysisService : INutritionAnalysisService
         return deficits;
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    //  RENI Reference Values — DOH Philippine RENI 2015
+    //  Simplified by age band and gender
+    // ─────────────────────────────────────────────────────────────────────────
+
     private static ReniValues GetReniValues(int age, Gender gender)
     {
-        // DOH Philippine RENI 2015 — simplified by age band
         return age switch
         {
             <= 3 => new ReniValues(1000, 25, 400, 30, 10, 500, 8, 3),
@@ -130,6 +180,10 @@ public class NutritionAnalysisService : INutritionAnalysisService
         };
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Helpers
+    // ─────────────────────────────────────────────────────────────────────────
+
     private static int CalculateAge(DateTime dateOfBirth)
     {
         var today = DateTime.Today;
@@ -138,6 +192,8 @@ public class NutritionAnalysisService : INutritionAnalysisService
         return age;
     }
 
+    // Private record — lives only inside this service
+    // ReniValues holds the recommended daily intake per nutrient
     private record ReniValues(
         double Calories,
         double ProteinG,

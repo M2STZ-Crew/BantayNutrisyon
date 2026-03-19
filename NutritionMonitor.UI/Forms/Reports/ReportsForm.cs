@@ -1,4 +1,29 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿// PHASE 3 FIX — ReportsForm.cs
+// Changes made:
+//
+//   [FIX #1] CRITICAL — Cross-thread crash on UI controls inside Task.Run()
+//            BEFORE: BuildReportDataAsync() read _dtpFrom.Value, _dtpTo.Value,
+//                    _cmbStudent.SelectedItem, _cmbReportType.SelectedItem
+//                    INSIDE Task.Run() — that runs on a background thread.
+//                    WinForms controls can ONLY be read on the UI thread.
+//                    This throws InvalidOperationException the moment a user
+//                    clicks Preview or Generate.
+//
+//            AFTER:  All UI control values are captured as local variables
+//                    BEFORE Task.Run() starts — on the UI thread where it's safe.
+//                    Those captured values are passed as parameters into
+//                    BuildReportDataAsync(). The method no longer touches any
+//                    UI controls at all.
+//
+//   [FIX #2] Application.DoEvents() replaced with await Task.Yield()
+//            Same re-entrancy risk as BackupForm. SetLoading() is now async.
+//
+//   [FIX #3] Removed junk using:
+//            - using static System.Runtime.InteropServices.JavaScript.JSType;
+//              → JavaScript interop namespace. Has nothing to do with this form.
+//            - using Microsoft.EntityFrameworkCore;
+//              → EF Core belongs in DAL only, not UI forms.
+
 using Microsoft.Extensions.DependencyInjection;
 using NutritionMonitor.Models.DTOs;
 using NutritionMonitor.Models.Enums;
@@ -6,7 +31,6 @@ using NutritionMonitor.Models.Interfaces;
 using NutritionMonitor.UI.Session;
 using System.Text;
 using System.Text.Json;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 using SerilogLog = Serilog.Log;
 
 namespace NutritionMonitor.UI.Forms.Reports;
@@ -224,7 +248,6 @@ public class ReportsForm : UserControl
             TextAlign = ContentAlignment.MiddleLeft
         };
 
-        // Report type
         card.Controls.Add(MakeFieldLabel("REPORT TYPE", new Point(16, 46)));
         _cmbReportType = new ComboBox
         {
@@ -239,8 +262,8 @@ public class ReportsForm : UserControl
         _cmbReportType.SelectedIndex = 0;
         card.Controls.Add(_cmbReportType);
 
-        // Student filter
-        card.Controls.Add(MakeFieldLabel("STUDENT (OPTIONAL — blank = all)", new Point(16, 106)));
+        card.Controls.Add(MakeFieldLabel(
+            "STUDENT (OPTIONAL — blank = all)", new Point(16, 106)));
         _cmbStudent = new ComboBox
         {
             Font = new Font("Segoe UI", 10f),
@@ -253,7 +276,6 @@ public class ReportsForm : UserControl
         };
         card.Controls.Add(_cmbStudent);
 
-        // Date range row
         card.Controls.Add(MakeFieldLabel("FROM", new Point(16, 166)));
         card.Controls.Add(MakeFieldLabel("TO", new Point(196, 166)));
 
@@ -277,7 +299,6 @@ public class ReportsForm : UserControl
 
         card.Controls.AddRange(new Control[] { _dtpFrom, _dtpTo });
 
-        // Resize to fill width
         card.Resize += (_, _) =>
         {
             int w = card.Width - 32;
@@ -318,7 +339,6 @@ public class ReportsForm : UserControl
             TextAlign = ContentAlignment.MiddleLeft
         };
 
-        // Format checkboxes
         card.Controls.Add(MakeFieldLabel("OUTPUT FORMAT", new Point(16, 46)));
 
         _chkTxt = new CheckBox
@@ -341,7 +361,6 @@ public class ReportsForm : UserControl
             AutoSize = true
         };
 
-        // Output directory
         card.Controls.Add(MakeFieldLabel("OUTPUT DIRECTORY", new Point(16, 128)));
 
         var dirRow = new Panel
@@ -365,8 +384,7 @@ public class ReportsForm : UserControl
             BorderStyle = BorderStyle.None,
             Dock = DockStyle.Fill,
             Padding = new Padding(8, 0, 0, 0),
-            Text = Environment.GetFolderPath(
-                Environment.SpecialFolder.MyDocuments)
+            Text = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
         };
 
         _btnBrowseDir = new Button
@@ -386,7 +404,6 @@ public class ReportsForm : UserControl
         dirRow.Controls.Add(_txtOutputDir);
         dirRow.Controls.Add(_btnBrowseDir);
 
-        // Progress bar
         _progressBar = new ProgressBar
         {
             Style = ProgressBarStyle.Marquee,
@@ -406,7 +423,6 @@ public class ReportsForm : UserControl
             Height = 18
         };
 
-        // Action buttons
         _btnPreview = MakeButton(
             "👁  Preview", Color.FromArgb(240, 244, 248), TextMid, 110);
         _btnPreview.Location = new Point(16, 232);
@@ -424,8 +440,6 @@ public class ReportsForm : UserControl
             dirRow.Width = w;
             _progressBar.Width = w;
             _lblProgress.Width = w;
-
-            // Anchor buttons to right
             _btnGenerate.Location = new Point(
                 card.Width - _btnGenerate.Width - 16, 232);
             _btnPreview.Location = new Point(
@@ -471,7 +485,6 @@ public class ReportsForm : UserControl
             e.Graphics.FillRectangle(bar, 0, 0, previewCard.Width, 3);
         };
 
-        // Preview header bar
         var previewHeader = new Panel
         {
             Dock = DockStyle.Top,
@@ -536,7 +549,8 @@ public class ReportsForm : UserControl
             WordWrap = false
         };
 
-        WritePreviewLine("Ready. Click 👁 Preview to see a report preview, " +
+        WritePreviewLine(
+            "Ready. Click 👁 Preview to see a report preview, " +
             "or ▶ Generate Report to save files.",
             PreviewMuted);
 
@@ -598,8 +612,7 @@ public class ReportsForm : UserControl
         try
         {
             using var scope = ServiceLocator.CreateScope();
-            var svc = scope.ServiceProvider
-                .GetRequiredService<IStudentService>();
+            var svc = scope.ServiceProvider.GetRequiredService<IStudentService>();
             _students = (await svc.GetAllStudentsAsync()).ToList();
 
             _cmbStudent.Items.Clear();
@@ -620,19 +633,30 @@ public class ReportsForm : UserControl
 
     private async Task RunPreviewAsync()
     {
-        SetLoading(true, "Generating preview…");
+        // [FIX #1] ── Capture all UI values HERE on the UI thread ──────────────
+        // These lines MUST stay outside Task.Run(). Reading _dtpFrom.Value or
+        // _cmbStudent.SelectedItem on a background thread throws
+        // InvalidOperationException because WinForms controls are not thread-safe.
+        var from = _dtpFrom.Value.Date;
+        var to = _dtpTo.Value.Date.AddDays(1).AddSeconds(-1);
+        var selectedStudent = _cmbStudent.SelectedItem as StudentDto;
+        var reportType = _cmbReportType.SelectedItem?.ToString() ?? "Report";
+        // ──────────────────────────────────────────────────────────────────────
+
+        await SetLoadingAsync(true, "Generating preview…");
         _rtbPreview.Clear();
 
         try
         {
             _cts = new CancellationTokenSource();
+
+            // ✅ Safe — BuildReportDataAsync() no longer touches any UI controls
             var reportData = await Task.Run(
-                () => BuildReportDataAsync(_cts.Token),
+                () => BuildReportDataAsync(from, to, selectedStudent, reportType, _cts.Token),
                 _cts.Token);
 
             _lblPreviewTitle.Text =
-                $"●  PREVIEW — {_cmbReportType.SelectedItem}  " +
-                $"({DateTime.Now:HH:mm:ss})";
+                $"●  PREVIEW — {reportType}  ({DateTime.Now:HH:mm:ss})";
 
             RenderPreview(reportData);
             SetStatus("Preview generated.", TealAccent);
@@ -650,7 +674,7 @@ public class ReportsForm : UserControl
         }
         finally
         {
-            SetLoading(false, string.Empty);
+            await SetLoadingAsync(false, string.Empty);
             _cts?.Dispose();
             _cts = null;
         }
@@ -683,7 +707,16 @@ public class ReportsForm : UserControl
             return;
         }
 
-        SetLoading(true, "Generating report…");
+        // [FIX #1] ── Capture all UI values HERE on the UI thread ──────────────
+        var from = _dtpFrom.Value.Date;
+        var to = _dtpTo.Value.Date.AddDays(1).AddSeconds(-1);
+        var selectedStudent = _cmbStudent.SelectedItem as StudentDto;
+        var reportType = _cmbReportType.SelectedItem?.ToString() ?? "Report";
+        var saveTxt = _chkTxt.Checked;
+        var saveJson = _chkJson.Checked;
+        // ──────────────────────────────────────────────────────────────────────
+
+        await SetLoadingAsync(true, "Generating report…");
         _rtbPreview.Clear();
         SetStatus("Generating report files…", TextMuted);
 
@@ -693,25 +726,23 @@ public class ReportsForm : UserControl
         {
             _cts = new CancellationTokenSource();
 
-            // Build data asynchronously — UI stays responsive
+            // ✅ Safe — all values passed as parameters, no UI access inside
             var reportData = await Task.Run(
-                () => BuildReportDataAsync(_cts.Token),
+                () => BuildReportDataAsync(from, to, selectedStudent, reportType, _cts.Token),
                 _cts.Token);
 
             _cts.Token.ThrowIfCancellationRequested();
 
             string baseName =
-                $"Report_{SanitizeFileName(_cmbReportType.SelectedItem?.ToString() ?? "Report")}" +
+                $"Report_{SanitizeFileName(reportType)}" +
                 $"_{DateTime.Now:yyyyMMdd_HHmmss}";
 
-            // Write TXT asynchronously
-            if (_chkTxt.Checked)
+            if (saveTxt)
             {
                 UpdateProgress("Writing TXT file…");
                 string txtPath = Path.Combine(outputDir, baseName + ".txt");
                 string txtContent = await Task.Run(
-                    () => BuildTxtReport(reportData),
-                    _cts.Token);
+                    () => BuildTxtReport(reportData), _cts.Token);
                 await File.WriteAllTextAsync(txtPath, txtContent, _cts.Token);
                 filesWritten.Add(txtPath);
                 RenderPreview(reportData);
@@ -719,19 +750,16 @@ public class ReportsForm : UserControl
 
             _cts.Token.ThrowIfCancellationRequested();
 
-            // Write JSON asynchronously
-            if (_chkJson.Checked)
+            if (saveJson)
             {
                 UpdateProgress("Writing JSON file…");
                 string jsonPath = Path.Combine(outputDir, baseName + ".json");
                 string jsonContent = await Task.Run(
-                    () => BuildJsonReport(reportData),
-                    _cts.Token);
+                    () => BuildJsonReport(reportData), _cts.Token);
                 await File.WriteAllTextAsync(jsonPath, jsonContent, _cts.Token);
                 filesWritten.Add(jsonPath);
             }
 
-            // Summary
             _lblLastReport.Text =
                 $"Last report: {DateTime.Now:MMM dd, yyyy  HH:mm:ss}  " +
                 $"·  {filesWritten.Count} file(s) saved to {ShortenPath(outputDir, 40)}";
@@ -746,7 +774,7 @@ public class ReportsForm : UserControl
             SerilogLog.Information(
                 "Report generated by {User}: {Type} → {Files}",
                 SessionManager.Current.FullName,
-                _cmbReportType.SelectedItem,
+                reportType,
                 string.Join(", ", filesWritten));
         }
         catch (OperationCanceledException)
@@ -762,38 +790,40 @@ public class ReportsForm : UserControl
         }
         finally
         {
-            SetLoading(false, string.Empty);
+            await SetLoadingAsync(false, string.Empty);
             _cts?.Dispose();
             _cts = null;
         }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    //  Report Data Builder (runs on background thread via Task.Run)
+    //  Report Data Builder
+    //
+    //  [FIX #1] BEFORE: This method read _dtpFrom.Value, _dtpTo.Value,
+    //                   _cmbStudent.SelectedItem, _cmbReportType.SelectedItem
+    //                   directly — while running on a Task.Run background thread.
+    //                   That caused an InvalidOperationException crash.
+    //
+    //           AFTER:  All UI-sourced values are now PARAMETERS passed in from
+    //                   the caller (RunPreviewAsync / RunGenerateAsync) which
+    //                   captured them on the UI thread before Task.Run started.
+    //                   This method is now pure data logic — no UI access at all.
     // ─────────────────────────────────────────────────────────────────────────
 
-    private async Task<ReportData> BuildReportDataAsync(CancellationToken ct)
+    private async Task<ReportData> BuildReportDataAsync(
+        DateTime from,
+        DateTime to,
+        StudentDto? selectedStudent,
+        string reportType,
+        CancellationToken ct)
     {
-        // This method is called inside Task.Run, so we use a fresh DI scope.
-        // All async DB calls here are awaited — EF Core handles thread safety
-        // at the DbContext level since each scope has its own context instance.
-
         using var scope = ServiceLocator.CreateScope();
-        var studentSvc = scope.ServiceProvider
-            .GetRequiredService<IStudentService>();
-        var mealSvc = scope.ServiceProvider
-            .GetRequiredService<IMealLogService>();
-        var analysisSvc = scope.ServiceProvider
-            .GetRequiredService<INutritionAnalysisService>();
+        var studentSvc = scope.ServiceProvider.GetRequiredService<IStudentService>();
+        var mealSvc = scope.ServiceProvider.GetRequiredService<IMealLogService>();
+        var analysisSvc = scope.ServiceProvider.GetRequiredService<INutritionAnalysisService>();
 
         ct.ThrowIfCancellationRequested();
 
-        var from = _dtpFrom.Value.Date;
-        var to = _dtpTo.Value.Date.AddDays(1).AddSeconds(-1);
-
-        var selectedStudent = _cmbStudent.SelectedItem as StudentDto;
-
-        // Fetch students
         List<StudentDto> students;
         if (selectedStudent != null)
             students = new List<StudentDto> { selectedStudent };
@@ -802,7 +832,6 @@ public class ReportsForm : UserControl
 
         ct.ThrowIfCancellationRequested();
 
-        // Fetch logs
         List<MealLogDto> logs;
         if (selectedStudent != null)
             logs = (await mealSvc.GetLogsByStudentAndDateRangeAsync(
@@ -812,9 +841,7 @@ public class ReportsForm : UserControl
 
         ct.ThrowIfCancellationRequested();
 
-        // Fetch analysis
-        var analyses = (await analysisSvc.AnalyzeAllStudentsAsync(from, to))
-            .ToList();
+        var analyses = (await analysisSvc.AnalyzeAllStudentsAsync(from, to)).ToList();
 
         if (selectedStudent != null)
             analyses = analyses
@@ -825,12 +852,12 @@ public class ReportsForm : UserControl
 
         return new ReportData
         {
-            ReportType = _cmbReportType.SelectedItem?.ToString() ?? "Report",
+            ReportType = reportType,
             GeneratedAt = DateTime.Now,
             GeneratedBy = SessionManager.IsLoggedIn
-                ? SessionManager.Current.FullName : "Unknown",
+                               ? SessionManager.Current.FullName : "Unknown",
             PeriodFrom = from,
-            PeriodTo = _dtpTo.Value.Date,
+            PeriodTo = to.Date,
             Students = students,
             MealLogs = logs,
             Analyses = analyses
@@ -850,11 +877,11 @@ public class ReportsForm : UserControl
         sb.AppendLine(line);
         sb.AppendLine($"  NUTRITION MONITOR — {data.ReportType.ToUpperInvariant()}");
         sb.AppendLine(line);
-        sb.AppendLine($"  Generated  : {data.GeneratedAt:dddd, MMMM dd, yyyy  HH:mm:ss}");
+        sb.AppendLine($"  Generated   : {data.GeneratedAt:dddd, MMMM dd, yyyy  HH:mm:ss}");
         sb.AppendLine($"  Generated By: {data.GeneratedBy}");
-        sb.AppendLine($"  Period     : {data.PeriodFrom:MMM dd, yyyy}  to  {data.PeriodTo:MMM dd, yyyy}");
-        sb.AppendLine($"  Students   : {data.Students.Count}");
-        sb.AppendLine($"  Meal Logs  : {data.MealLogs.Count}");
+        sb.AppendLine($"  Period      : {data.PeriodFrom:MMM dd, yyyy}  to  {data.PeriodTo:MMM dd, yyyy}");
+        sb.AppendLine($"  Students    : {data.Students.Count}");
+        sb.AppendLine($"  Meal Logs   : {data.MealLogs.Count}");
         sb.AppendLine(line);
         sb.AppendLine();
 
@@ -881,7 +908,7 @@ public class ReportsForm : UserControl
         sb.AppendLine();
         sb.AppendLine(line);
         sb.AppendLine("  END OF REPORT");
-        sb.AppendLine($"  NutritionMonitor v1.0  ·  .NET 10  ·  DOH RENI 2015");
+        sb.AppendLine("  NutritionMonitor v1.0  ·  .NET 10  ·  DOH RENI 2015");
         sb.AppendLine(line);
 
         return sb.ToString();
@@ -966,8 +993,7 @@ public class ReportsForm : UserControl
         foreach (var a in flagged)
         {
             string status = a.Status == NutritionStatus.Malnourished
-                ? "*** MALNOURISHED ***"
-                : "**  AT-RISK  **";
+                ? "*** MALNOURISHED ***" : "**  AT-RISK  **";
 
             sb.AppendLine($"  {status}");
             sb.AppendLine($"  Student  : {a.StudentName}  (Age {a.Age}, {a.Gender})");
@@ -1042,8 +1068,9 @@ public class ReportsForm : UserControl
                 _ => "NORMAL"
             };
 
-            sb.AppendLine($"  {a.StudentName}  [{status}]  " +
-                          $"Avg Weighted Deficit: {a.WeightedDeficitPercentage:F1}%");
+            sb.AppendLine(
+                $"  {a.StudentName}  [{status}]  " +
+                $"Avg Weighted Deficit: {a.WeightedDeficitPercentage:F1}%");
 
             foreach (var d in a.Deficits.OrderByDescending(x => x.DeficitPercentage))
             {
@@ -1086,15 +1113,11 @@ public class ReportsForm : UserControl
                 totalStudents = data.Students.Count,
                 totalMealLogs = data.MealLogs.Count,
                 totalAnalyzed = data.Analyses.Count,
-                normalCount = data.Analyses.Count(
-                    a => a.Status == NutritionStatus.Normal),
-                atRiskCount = data.Analyses.Count(
-                    a => a.Status == NutritionStatus.AtRisk),
-                malnourishedCount = data.Analyses.Count(
-                    a => a.Status == NutritionStatus.Malnourished),
+                normalCount = data.Analyses.Count(a => a.Status == NutritionStatus.Normal),
+                atRiskCount = data.Analyses.Count(a => a.Status == NutritionStatus.AtRisk),
+                malnourishedCount = data.Analyses.Count(a => a.Status == NutritionStatus.Malnourished),
                 averageDeficitPct = data.Analyses.Count > 0
-                    ? data.Analyses.Average(a => a.WeightedDeficitPercentage)
-                    : 0.0
+                    ? data.Analyses.Average(a => a.WeightedDeficitPercentage) : 0.0
             },
             students = data.Students,
             mealLogs = data.MealLogs.Select(l => new
@@ -1161,15 +1184,12 @@ public class ReportsForm : UserControl
     {
         _rtbPreview.Clear();
 
-        // Header
+        WritePreviewLine(new string('═', 68), PreviewMuted);
+        WritePreviewLine($"  {data.ReportType.ToUpperInvariant()}", TealAccent);
         WritePreviewLine(new string('═', 68), PreviewMuted);
         WritePreviewLine(
-            $"  {data.ReportType.ToUpperInvariant()}",
-            TealAccent);
-        WritePreviewLine(new string('═', 68), PreviewMuted);
-        WritePreviewLine(
-            $"  Generated : {data.GeneratedAt:MMM dd, yyyy  HH:mm:ss}  " +
-            $"by {data.GeneratedBy}", PreviewMuted);
+            $"  Generated : {data.GeneratedAt:MMM dd, yyyy  HH:mm:ss}  by {data.GeneratedBy}",
+            PreviewMuted);
         WritePreviewLine(
             $"  Period    : {data.PeriodFrom:MMM dd} – {data.PeriodTo:MMM dd, yyyy}  " +
             $"·  {data.Students.Count} students  ·  {data.MealLogs.Count} logs",
@@ -1177,7 +1197,6 @@ public class ReportsForm : UserControl
         WritePreviewLine(new string('─', 68), PreviewMuted);
         WritePreviewLine(string.Empty, PreviewMuted);
 
-        // Status summary
         if (data.Analyses.Count > 0)
         {
             int normal = data.Analyses.Count(a => a.Status == NutritionStatus.Normal);
@@ -1185,16 +1204,12 @@ public class ReportsForm : UserControl
             int mal = data.Analyses.Count(a => a.Status == NutritionStatus.Malnourished);
 
             WritePreviewLine("  STATUS SUMMARY", PreviewMuted);
-            WritePreviewLine(
-                $"  ✅  Normal       : {normal}", Color.FromArgb(0, 200, 150));
-            WritePreviewLine(
-                $"  ⚠   At-Risk      : {atRisk}", AmberColor);
-            WritePreviewLine(
-                $"  🔴  Malnourished : {mal}", DangerRed);
+            WritePreviewLine($"  ✅  Normal       : {normal}", Color.FromArgb(0, 200, 150));
+            WritePreviewLine($"  ⚠   At-Risk      : {atRisk}", AmberColor);
+            WritePreviewLine($"  🔴  Malnourished : {mal}", DangerRed);
             WritePreviewLine(string.Empty, PreviewMuted);
         }
 
-        // Top at-risk
         var flagged = data.Analyses
             .Where(a => a.Status != NutritionStatus.Normal)
             .OrderByDescending(a => a.WeightedDeficitPercentage)
@@ -1210,8 +1225,7 @@ public class ReportsForm : UserControl
                 Color c = a.Status == NutritionStatus.Malnourished
                     ? DangerRed : AmberColor;
                 WritePreviewLine(
-                    $"  {a.StudentName,-28} " +
-                    $"{a.Status,-16} " +
+                    $"  {a.StudentName,-28} {a.Status,-16} " +
                     $"Deficit: {a.WeightedDeficitPercentage:F1}%", c);
             }
             WritePreviewLine(string.Empty, PreviewMuted);
@@ -1220,8 +1234,7 @@ public class ReportsForm : UserControl
         WritePreviewLine(new string('─', 68), PreviewMuted);
         WritePreviewLine(
             $"  Full report contains {data.MealLogs.Count} meal log entries " +
-            $"across {data.Students.Count} students.",
-            PreviewMuted);
+            $"across {data.Students.Count} students.", PreviewMuted);
         WritePreviewLine(
             "  Use ▶ Generate Report to save complete TXT / JSON files.",
             PreviewMuted);
@@ -1242,7 +1255,12 @@ public class ReportsForm : UserControl
         _rtbPreview.ScrollToCaret();
     }
 
-    private void SetLoading(bool loading, string progressText)
+    // [FIX #2] SetLoading is now async using await Task.Yield()
+    // BEFORE: private void SetLoading(bool loading, string progressText)
+    //         { ... Application.DoEvents(); }
+    // AFTER:  private async Task SetLoadingAsync(...)
+    //         { ... await Task.Yield(); }
+    private async Task SetLoadingAsync(bool loading, string progressText)
     {
         _btnGenerate.Enabled = !loading;
         _btnPreview.Enabled = !loading;
@@ -1250,13 +1268,13 @@ public class ReportsForm : UserControl
         _lblProgress.Text = progressText;
         _btnGenerate.Text = loading ? "Generating…" : "▶  Generate Report";
         _btnPreview.Text = loading ? "Working…" : "👁  Preview";
-        Application.DoEvents();
+        await Task.Yield(); // ✅ Safe single-frame UI refresh
     }
 
     private void UpdateProgress(string message)
     {
         _lblProgress.Text = message;
-        Application.DoEvents();
+        // No DoEvents here — we're already on the UI thread between awaits
     }
 
     private void SetStatus(string msg, Color color)
@@ -1289,8 +1307,7 @@ public class ReportsForm : UserControl
         g.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1);
     }
 
-    private static Button MakeButton(
-        string text, Color bg, Color fg, int width)
+    private static Button MakeButton(string text, Color bg, Color fg, int width)
     {
         var btn = new Button
         {
