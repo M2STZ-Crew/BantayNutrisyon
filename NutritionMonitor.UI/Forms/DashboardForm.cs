@@ -98,7 +98,7 @@ public class DashboardForm : Form
     {
         SuspendLayout();
 
-        Text = "NutritionMonth";
+        Text = "NutritionMonitor";
         Size = new Size(1280, 760);
         MinimumSize = new Size(1024, 640);
         StartPosition = FormStartPosition.CenterScreen;
