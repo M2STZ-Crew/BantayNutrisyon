@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿// File Path: NutritionMonitor.UI/Forms/Charts/ChartsForm.cs
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NutritionMonitor.Models.DTOs;
 using NutritionMonitor.Models.Entities;
@@ -10,6 +11,12 @@ using ScottPlot.TickGenerators.TimeUnits;
 using System.Diagnostics.Metrics;
 using System.Globalization;
 using static System.Windows.Forms.LinkLabel;
+using System.Drawing;
+using System.Windows.Forms;
+using System.Collections.Generic;
+using System;
+using System.Threading.Tasks;
+using System.Linq;
 using SerilogLog = Serilog.Log;
 using WinForms = System.Windows.Forms;
 using Drawing = System.Drawing;
@@ -249,15 +256,26 @@ public class ChartsForm : UserControl
             e.Graphics.DrawLine(pen, 0, 0, _statusBar.Width, 0);
         };
 
+        var statusLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            Margin = new Padding(0)
+        };
+        statusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+        statusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+        statusLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+
         _lblCount = new WinForms.Label
         {
             Text = "Select a student and date range, then click Load Charts.",
             Font = new Font("Segoe UI", 8.5f),
             ForeColor = TextMuted,
             AutoSize = true,
-            Location = new Point(0, 0),
-            Height = 36,
-            TextAlign = ContentAlignment.MiddleLeft
+            Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Bottom,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Margin = new Padding(0)
         };
 
         _lblStatus = new WinForms.Label
@@ -266,14 +284,15 @@ public class ChartsForm : UserControl
             Font = new Font("Segoe UI", 8.5f),
             ForeColor = TealAccent,
             AutoSize = true,
-            Height = 36,
-            TextAlign = ContentAlignment.MiddleLeft
+            Anchor = AnchorStyles.Right | AnchorStyles.Top | AnchorStyles.Bottom,
+            TextAlign = ContentAlignment.MiddleRight,
+            Margin = new Padding(0)
         };
 
-        _statusBar.Controls.AddRange(new Control[] { _lblCount, _lblStatus });
-        _statusBar.Resize += (_, _) =>
-            _lblStatus.Location = new Point(
-                _statusBar.Width - _lblStatus.Width - 16, 0);
+        statusLayout.Controls.Add(_lblCount, 0, 0);
+        statusLayout.Controls.Add(_lblStatus, 1, 0);
+
+        _statusBar.Controls.Add(statusLayout);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -304,7 +323,7 @@ public class ChartsForm : UserControl
     private async Task LoadAllChartsAsync()
     {
         SetStatus("Loading charts…", TextMuted);
-        SetLoading(true);
+        await SetLoadingAsync(true);
 
         try
         {
@@ -399,7 +418,7 @@ public class ChartsForm : UserControl
         }
         finally
         {
-            SetLoading(false);
+            await SetLoadingAsync(false);
         }
     }
 
@@ -686,19 +705,17 @@ public class ChartsForm : UserControl
     //  UI Helpers
     // ─────────────────────────────────────────────────────────────────────────
 
-    private void SetLoading(bool loading)
+    private async Task SetLoadingAsync(bool loading)
     {
         _btnLoad.Enabled = !loading;
         _btnLoad.Text = loading ? "Loading…" : "📊  Load Charts";
-        Application.DoEvents();
+        await Task.Yield(); // Rule 11
     }
 
     private void SetStatus(string msg, WinColor color)
     {
         _lblStatus.ForeColor = color;
         _lblStatus.Text = msg;
-        _lblStatus.Location = new Point(
-            _statusBar.Width - _lblStatus.Width - 16, 0);
     }
 
     private static WinForms.Label MakeFlowLabel(string text) => new()
