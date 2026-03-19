@@ -8,8 +8,8 @@ obj/
 *.db-wal
 
 # Serilog log files
-Logs/
-*.log
+#Logs/
+#*.log
 
 # Visual Studio
 .vs/
@@ -35,3 +35,10 @@ AppData/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+
+# Phase 9: BackupForm.cs
+
+# Phase 10: ReportsForm.cs (Form using Task.Run for async generation and a RichTextBox preview panel that must fill remaining space)
+
+# Phase 11: ErrorLogViewerForm.cs (UserControl containing a Rich# log viewer and a stats strip)
