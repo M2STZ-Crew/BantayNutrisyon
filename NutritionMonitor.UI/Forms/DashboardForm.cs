@@ -1,7 +1,7 @@
 ﻿// File Path: NutritionMonitor.UI/Forms/DashboardForm.cs
 using NutritionMonitor.Models.Enums;
+using NutritionMonitor.Models.Interfaces;
 using NutritionMonitor.UI.Session;
-using SerilogLog = Serilog.Log;
 using NutritionMonitor.UI.Forms.Students;
 using NutritionMonitor.UI.Forms.MealLogs;
 using NutritionMonitor.UI.Forms.Analysis;
@@ -9,10 +9,8 @@ using NutritionMonitor.UI.Forms.Charts;
 using NutritionMonitor.UI.Forms.Backup;
 using NutritionMonitor.UI.Forms.Reports;
 using NutritionMonitor.UI.Forms.Logs;
-using System.Drawing;
-using System.Windows.Forms;
-using System.Collections.Generic;
-using System;
+using Microsoft.Extensions.DependencyInjection;
+using SerilogLog = Serilog.Log;
 
 namespace NutritionMonitor.UI.Forms;
 
@@ -60,6 +58,12 @@ public class DashboardForm : Form
     private Label _lblUserBadge = null!;
     private Label _lblRoleBadge = null!;
 
+    // ── Stat card value labels (populated after data loads) ───────────────────
+    private Label _statStudents = null!;
+    private Label _statLogs = null!;
+    private Label _statAtRisk = null!;
+    private Label _statMal = null!;
+
     // ── Nav state ─────────────────────────────────────────────────────────────
     private Button? _activeNavBtn = null;
     private string _currentPage = "Dashboard";
@@ -69,13 +73,13 @@ public class DashboardForm : Form
 
     private readonly NavItem[] _navItems =
     {
-        new("⊞", "Dashboard",        "Dashboard"),
-        new("👤", "Students",         "Students"),
-        new("🍽",  "Meal Logs",        "MealLogs"),
+        new("⊞",  "Dashboard",         "Dashboard"),
+        new("👤", "Students",          "Students"),
+        new("🍽", "Meal Logs",         "MealLogs"),
         new("📊", "Nutrition Analysis","Analysis"),
-        new("📈", "Visualizations",   "Charts"),
-        new("📄", "Reports",          "Reports"),
-        new("💾", "Backup & Restore", "Backup",   AdminOnly: true),
+        new("📈", "Visualizations",    "Charts"),
+        new("📄", "Reports",           "Reports"),
+        new("💾", "Backup & Restore",  "Backup",  AdminOnly: true),
         new("📋", "Application Logs",  "Logs"),
     };
 
@@ -102,7 +106,6 @@ public class DashboardForm : Form
         Font = new Font("Segoe UI", 9.5f);
         FormBorderStyle = FormBorderStyle.Sizable;
 
-        // ROOT LAYOUT - Rule 2: Prevents sidebar overlapping main content
         var rootLayout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -186,7 +189,7 @@ public class DashboardForm : Form
             Font = new Font("Segoe UI", 11f, FontStyle.Bold),
             ForeColor = Color.White,
             AutoSize = true,
-            Margin = new Padding(0, 0, 0, 0)
+            Margin = new Padding(0)
         };
 
         _lblAppSub = new Label
@@ -232,7 +235,6 @@ public class DashboardForm : Form
         foreach (var item in _navItems)
         {
             if (item.AdminOnly && !SessionManager.IsAdmin) continue;
-
             var btn = BuildNavButton(item);
             if (firstBtn == null) firstBtn = btn;
             _navContainer.Controls.Add(btn);
@@ -272,7 +274,6 @@ public class DashboardForm : Form
         btn.FlatAppearance.BorderSize = 0;
         btn.FlatAppearance.MouseOverBackColor = SidebarHover;
         btn.FlatAppearance.MouseDownBackColor = SidebarHover;
-
         btn.Click += NavButton_Click;
         return btn;
     }
@@ -311,7 +312,6 @@ public class DashboardForm : Form
             e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             using var brush = new SolidBrush(TealAccent);
             e.Graphics.FillEllipse(brush, 0, 0, 37, 37);
-
             string initials = GetInitials(SessionManager.IsLoggedIn
                 ? SessionManager.Current.FullName : "?");
             using var font = new Font("Segoe UI", 11f, FontStyle.Bold);
@@ -323,7 +323,8 @@ public class DashboardForm : Form
 
         var lblName = new Label
         {
-            Text = SessionManager.IsLoggedIn ? SessionManager.Current.FullName : "Unknown",
+            Text = SessionManager.IsLoggedIn
+                ? SessionManager.Current.FullName : "Unknown",
             Font = new Font("Segoe UI", 9f, FontStyle.Bold),
             ForeColor = Color.White,
             AutoSize = true,
@@ -332,7 +333,8 @@ public class DashboardForm : Form
 
         var lblRole = new Label
         {
-            Text = SessionManager.IsLoggedIn ? SessionManager.Current.Role.ToString() : string.Empty,
+            Text = SessionManager.IsLoggedIn
+                ? SessionManager.Current.Role.ToString() : string.Empty,
             Font = new Font("Segoe UI", 7.5f),
             ForeColor = TealAccent,
             AutoSize = true,
@@ -415,7 +417,8 @@ public class DashboardForm : Form
         _topBar.Paint += (s, e) =>
         {
             using var pen = new Pen(BorderLight, 1);
-            e.Graphics.DrawLine(pen, 0, _topBar.Height - 1, _topBar.Width, _topBar.Height - 1);
+            e.Graphics.DrawLine(pen, 0, _topBar.Height - 1,
+                _topBar.Width, _topBar.Height - 1);
         };
 
         var topLayout = new TableLayoutPanel
@@ -428,7 +431,7 @@ public class DashboardForm : Form
         topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
         topLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
-        // Left Side: Titles
+        // Left: Titles
         var titleLayout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -459,7 +462,7 @@ public class DashboardForm : Form
         titleLayout.Controls.Add(_lblPageTitle, 0, 0);
         titleLayout.Controls.Add(_lblBreadcrumb, 0, 1);
 
-        // Right Side: Badges
+        // Right: Badges
         var badgeLayout = new TableLayoutPanel
         {
             AutoSize = true,
@@ -471,7 +474,8 @@ public class DashboardForm : Form
 
         _lblUserBadge = new Label
         {
-            Text = SessionManager.IsLoggedIn ? SessionManager.Current.FullName : string.Empty,
+            Text = SessionManager.IsLoggedIn
+                ? SessionManager.Current.FullName : string.Empty,
             Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
             ForeColor = TextDark,
             AutoSize = true,
@@ -482,7 +486,8 @@ public class DashboardForm : Form
 
         _lblRoleBadge = new Label
         {
-            Text = SessionManager.IsLoggedIn ? $"  {SessionManager.Current.Role}  " : string.Empty,
+            Text = SessionManager.IsLoggedIn
+                ? $"  {SessionManager.Current.Role}  " : string.Empty,
             Font = new Font("Segoe UI", 8f, FontStyle.Bold),
             ForeColor = TealAccent,
             BackColor = TealLight,
@@ -490,7 +495,7 @@ public class DashboardForm : Form
             Anchor = AnchorStyles.Right,
             TextAlign = ContentAlignment.MiddleCenter,
             Padding = new Padding(6, 4, 6, 4),
-            Margin = new Padding(0, 0, 0, 0)
+            Margin = new Padding(0)
         };
 
         badgeLayout.Controls.Add(_lblUserBadge, 0, 0);
@@ -525,7 +530,6 @@ public class DashboardForm : Form
     {
         if (sender is not Button btn) return;
         if (btn.Tag is not NavItem item) return;
-
         ActivateNavButton(btn);
         NavigateTo(item.Page, item.Label);
     }
@@ -545,7 +549,6 @@ public class DashboardForm : Form
         btn.ForeColor = Color.White;
         btn.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
         _activeNavBtn = btn;
-
         btn.Paint += PaintNavActiveBar;
         btn.Invalidate();
     }
@@ -621,7 +624,7 @@ public class DashboardForm : Form
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    //  Dashboard Content — Stat Cards + Welcome
+    //  Dashboard Content
     // ─────────────────────────────────────────────────────────────────────────
 
     private void LoadDashboardContent()
@@ -641,12 +644,12 @@ public class DashboardForm : Form
         dashboardLayout.Controls.Add(banner, 0, 0);
 
         // ── Stat cards row ────────────────────────────────────────────────────
-        var stats = new[]
+        var statDefs = new[]
         {
-            ("Total Students",      "—",   "Enrolled students",         StatBlue,  StatBlueLight,  "👤"),
-            ("Meal Logs Today",     "—",   "Entries logged today",       StatGreen, StatGreenLight, "🍽"),
-            ("At-Risk Students",    "—",   "Require attention",          StatAmber, StatAmberLight, "⚠"),
-            ("Malnourished",        "—",   "Critical nutritional deficit",StatRed,  StatRedLight,   "🔴"),
+            ("Total Students",    "—", "Enrolled students",          StatBlue,  StatBlueLight,  "👤"),
+            ("Meal Logs Today",   "—", "Entries logged today",        StatGreen, StatGreenLight, "🍽"),
+            ("At-Risk Students",  "—", "Require attention",           StatAmber, StatAmberLight, "⚠"),
+            ("Malnourished",      "—", "Critical nutritional deficit",StatRed,   StatRedLight,   "🔴"),
         };
 
         var cardRow = new Panel
@@ -658,12 +661,21 @@ public class DashboardForm : Form
         };
 
         var cards = new List<Panel>();
-        foreach (var (title, value, sub, accent, light, icon) in stats)
+        var valueLabels = new List<Label>();
+
+        foreach (var (title, value, sub, accent, light, icon) in statDefs)
         {
-            var card = BuildStatCard(title, value, sub, accent, light, icon);
+            var (card, valLbl) = BuildStatCard(title, value, sub, accent, light, icon);
             cards.Add(card);
+            valueLabels.Add(valLbl);
             cardRow.Controls.Add(card);
         }
+
+        // Store references so LoadDashboardStatsAsync can update them
+        _statStudents = valueLabels[0];
+        _statLogs = valueLabels[1];
+        _statAtRisk = valueLabels[2];
+        _statMal = valueLabels[3];
 
         void LayoutCards()
         {
@@ -690,12 +702,13 @@ public class DashboardForm : Form
         dashboardLayout.Controls.Add(sectionTitle, 0, 2);
 
         // ── Quick access tiles ────────────────────────────────────────────────
-        var tiles = new[]
+        // Each tile now carries a Page target for navigation
+        var tileDefs = new[]
         {
-            ("👤",  "Manage Students",    "Add, edit, search\nstudent records",      StatBlue),
-            ("🍽",  "Log Meals",          "Record daily meal\nand nutrient data",     StatGreen),
-            ("📊",  "Run Analysis",       "Compute nutritional\ndeficit reports",     StatAmber),
-            ("💾",  "Backup Data",        "Export or restore\nsystem data",           StatRed),
+            ("👤", "Manage Students", "Add, edit, search\nstudent records",  StatBlue,  "Students"),
+            ("🍽", "Log Meals",       "Record daily meal\nand nutrient data", StatGreen, "MealLogs"),
+            ("📊", "Run Analysis",    "Compute nutritional\ndeficit reports",  StatAmber, "Analysis"),
+            ("💾", "Backup Data",     "Export or restore\nsystem data",        StatRed,   "Backup"),
         };
 
         var tileRow = new Panel
@@ -707,9 +720,9 @@ public class DashboardForm : Form
         };
 
         var tileList = new List<Panel>();
-        foreach (var (icon, title, desc, color) in tiles)
+        foreach (var (icon, title, desc, color, page) in tileDefs)
         {
-            var tile = BuildQuickTile(icon, title, desc, color);
+            var tile = BuildQuickTile(icon, title, desc, color, page);
             tileList.Add(tile);
             tileRow.Controls.Add(tile);
         }
@@ -733,10 +746,81 @@ public class DashboardForm : Form
 
         _contentArea.Controls.Add(dashboardLayout);
 
-        // Force initial reflows
+        // Force initial layout
         LayoutCards();
         LayoutTiles();
+
+        // Load real stat numbers asynchronously — UI stays responsive
+        _ = LoadDashboardStatsAsync();
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Stat Card Data Loader
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private async Task LoadDashboardStatsAsync()
+    {
+        try
+        {
+            using var scope = ServiceLocator.CreateScope();
+            var studentSvc = scope.ServiceProvider
+                .GetRequiredService<IStudentService>();
+            var mealSvc = scope.ServiceProvider
+                .GetRequiredService<IMealLogService>();
+            var analysisSvc = scope.ServiceProvider
+                .GetRequiredService<INutritionAnalysisService>();
+
+            // Total students
+            var students = (await studentSvc.GetAllStudentsAsync()).ToList();
+            SafeSetText(_statStudents, students.Count.ToString());
+
+            // Meal logs today
+            var today = DateTime.Today;
+            var todayEnd = today.AddDays(1).AddSeconds(-1);
+            var todayLogs = (await mealSvc
+                .GetLogsByDateRangeAsync(today, todayEnd)).ToList();
+            SafeSetText(_statLogs, todayLogs.Count.ToString());
+
+            // At-risk and malnourished (last 30 days)
+            var from = today.AddDays(-30);
+            var analyses = (await analysisSvc
+                .AnalyzeAllStudentsAsync(from, todayEnd)).ToList();
+
+            int atRisk = analyses.Count(a => a.Status == NutritionStatus.AtRisk);
+            int mal = analyses.Count(a => a.Status == NutritionStatus.Malnourished);
+
+            SafeSetText(_statAtRisk, atRisk.ToString());
+            SafeSetText(_statMal, mal.ToString());
+
+            SerilogLog.Information(
+                "Dashboard stats — Students:{S} LogsToday:{L} AtRisk:{AR} Mal:{M}",
+                students.Count, todayLogs.Count, atRisk, mal);
+        }
+        catch (Exception ex)
+        {
+            SerilogLog.Error(ex, "Failed to load dashboard stats.");
+            // Gracefully show dashes — do not crash the dashboard
+            foreach (var lbl in new[] { _statStudents, _statLogs, _statAtRisk, _statMal })
+                SafeSetText(lbl, "—");
+        }
+    }
+
+    /// <summary>
+    /// Thread-safe label text setter — guards against disposed labels
+    /// when the user navigates away before the async call completes.
+    /// </summary>
+    private static void SafeSetText(Label? lbl, string text)
+    {
+        if (lbl == null || lbl.IsDisposed) return;
+        if (lbl.InvokeRequired)
+            lbl.Invoke(() => lbl.Text = text);
+        else
+            lbl.Text = text;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Welcome Banner
+    // ─────────────────────────────────────────────────────────────────────────
 
     private Panel BuildWelcomeBanner()
     {
@@ -752,23 +836,21 @@ public class DashboardForm : Form
         {
             var g = e.Graphics;
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-
             using var stripeBrush = new SolidBrush(TealAccent);
             g.FillRectangle(stripeBrush, 0, 0, 5, banner.Height);
-
             var rect = new Rectangle(banner.Width - 180, 0, 180, banner.Height);
             using var gradBrush = new System.Drawing.Drawing2D.LinearGradientBrush(
                 rect, Color.Transparent, TealLight,
                 System.Drawing.Drawing2D.LinearGradientMode.Horizontal);
             g.FillRectangle(gradBrush, rect);
-
             using var pen = new Pen(BorderLight, 1);
             g.DrawRectangle(pen, 0, 0, banner.Width - 1, banner.Height - 1);
         };
 
         var hour = DateTime.Now.Hour;
         var greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-        var name = SessionManager.IsLoggedIn ? SessionManager.Current.FullName.Split(' ')[0] : "User";
+        var name = SessionManager.IsLoggedIn
+            ? SessionManager.Current.FullName.Split(' ')[0] : "User";
 
         var lblGreeting = new Label
         {
@@ -792,7 +874,11 @@ public class DashboardForm : Form
         return banner;
     }
 
-    private static Panel BuildStatCard(
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Stat Card — returns card Panel AND value Label so we can update it later
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private static (Panel card, Label valueLabel) BuildStatCard(
         string title, string value, string subtitle,
         Color accent, Color light, string icon)
     {
@@ -807,7 +893,6 @@ public class DashboardForm : Form
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             using var pen = new Pen(BorderLight, 1);
             g.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1);
-
             using var bar = new SolidBrush(accent);
             g.FillRectangle(bar, 0, 0, card.Width, 3);
         };
@@ -857,11 +942,18 @@ public class DashboardForm : Form
         };
 
         card.Controls.AddRange(new Control[] { iconPanel, lblValue, lblTitle, lblSub });
-        return card;
+
+        // Return both the card and the value label so the caller can update it
+        return (card, lblValue);
     }
 
-    private static Panel BuildQuickTile(
-        string icon, string title, string desc, Color accent)
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Quick Tile — now accepts a page target and wires click navigation
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private Panel BuildQuickTile(
+        string icon, string title, string desc,
+        Color accent, string page)
     {
         var tile = new Panel
         {
@@ -877,8 +969,24 @@ public class DashboardForm : Form
             g.DrawRectangle(pen, 0, 0, tile.Width - 1, tile.Height - 1);
         };
 
-        tile.MouseEnter += (_, _) => { tile.BackColor = Color.FromArgb(248, 252, 252); tile.Invalidate(); };
-        tile.MouseLeave += (_, _) => { tile.BackColor = CardBg; tile.Invalidate(); };
+        tile.MouseEnter += (_, _) =>
+        {
+            tile.BackColor = Color.FromArgb(248, 252, 252);
+            tile.Invalidate();
+        };
+        tile.MouseLeave += (_, _) =>
+        {
+            tile.BackColor = CardBg;
+            tile.Invalidate();
+        };
+
+        // ── Wire tile click to navigation ─────────────────────────────────────
+        tile.Click += (_, _) =>
+        {
+            NavigateTo(page, title);
+            // Also highlight the matching nav button in the sidebar
+            ActivateMatchingNavButton(page);
+        };
 
         var lblIcon = new Label
         {
@@ -888,7 +996,8 @@ public class DashboardForm : Form
             AutoSize = false,
             Size = new Size(44, 44),
             Location = new Point(16, 16),
-            TextAlign = ContentAlignment.MiddleCenter
+            TextAlign = ContentAlignment.MiddleCenter,
+            Cursor = Cursors.Hand
         };
 
         var lblTitle = new Label
@@ -897,7 +1006,8 @@ public class DashboardForm : Form
             Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
             ForeColor = TextDark,
             AutoSize = true,
-            Location = new Point(16, 64)
+            Location = new Point(16, 64),
+            Cursor = Cursors.Hand
         };
 
         var lblDesc = new Label
@@ -906,19 +1016,53 @@ public class DashboardForm : Form
             Font = new Font("Segoe UI", 8f),
             ForeColor = TextMuted,
             AutoSize = true,
-            Location = new Point(16, 84)
+            Location = new Point(16, 84),
+            Cursor = Cursors.Hand
         };
 
+        // Propagate hover and click from child labels to tile
         foreach (Control child in new Control[] { lblIcon, lblTitle, lblDesc })
         {
-            child.MouseEnter += (_, _) => { tile.BackColor = Color.FromArgb(248, 252, 252); tile.Invalidate(); };
-            child.MouseLeave += (_, _) => { tile.BackColor = CardBg; tile.Invalidate(); };
-            child.Cursor = Cursors.Hand;
+            child.MouseEnter += (_, _) =>
+            {
+                tile.BackColor = Color.FromArgb(248, 252, 252);
+                tile.Invalidate();
+            };
+            child.MouseLeave += (_, _) =>
+            {
+                tile.BackColor = CardBg;
+                tile.Invalidate();
+            };
+            child.Click += (_, _) =>
+            {
+                NavigateTo(page, title);
+                ActivateMatchingNavButton(page);
+            };
         }
 
         tile.Controls.AddRange(new Control[] { lblIcon, lblTitle, lblDesc });
         return tile;
     }
+
+    /// <summary>
+    /// When a quick tile is clicked, also highlight the matching
+    /// sidebar nav button so the active state stays in sync.
+    /// </summary>
+    private void ActivateMatchingNavButton(string page)
+    {
+        foreach (Control ctrl in _navContainer.Controls)
+        {
+            if (ctrl is Button btn && btn.Tag is NavItem item && item.Page == page)
+            {
+                ActivateNavButton(btn);
+                return;
+            }
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Info Strip
+    // ─────────────────────────────────────────────────────────────────────────
 
     private Panel BuildInfoStrip()
     {
@@ -967,7 +1111,7 @@ public class DashboardForm : Form
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    //  Coming Soon placeholder for unbuilt modules
+    //  Coming Soon Placeholder
     // ─────────────────────────────────────────────────────────────────────────
 
     private void LoadComingSoonContent(string label)
@@ -1007,7 +1151,6 @@ public class DashboardForm : Form
 
         card.Controls.Add(lbl);
         placeholderLayout.Controls.Add(card, 0, 0);
-
         _contentArea.Controls.Add(placeholderLayout);
     }
 

@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿// File Path: NutritionMonitor.UI/Forms/Reports/ReportsForm.cs
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NutritionMonitor.Models.DTOs;
 using NutritionMonitor.Models.Enums;
@@ -6,7 +7,14 @@ using NutritionMonitor.Models.Interfaces;
 using NutritionMonitor.UI.Session;
 using System.Text;
 using System.Text.Json;
-using static System.Runtime.InteropServices.JavaScript.JSType;
+using System.Drawing;
+using System.Windows.Forms;
+using System.Collections.Generic;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Linq;
+using System.IO;
 using SerilogLog = Serilog.Log;
 
 namespace NutritionMonitor.UI.Forms.Reports;
@@ -98,10 +106,11 @@ public class ReportsForm : UserControl
             RowCount = 4,
             ColumnCount = 1,
             BackColor = BgColor,
-            Padding = new Padding(0)
+            Padding = new Padding(0),
+            Margin = new Padding(0)
         };
         _outerLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 76f));   // header
-        _outerLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 280f));  // config
+        _outerLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 320f));  // config
         _outerLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));   // preview
         _outerLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36f));   // status
 
@@ -125,7 +134,8 @@ public class ReportsForm : UserControl
         _headerPanel = new Panel
         {
             Dock = DockStyle.Fill,
-            BackColor = CardBg
+            BackColor = CardBg,
+            Margin = new Padding(0)
         };
 
         _headerPanel.Paint += (s, e) =>
@@ -145,31 +155,43 @@ public class ReportsForm : UserControl
                 _headerPanel.Width, _headerPanel.Height - 1);
         };
 
+        var headerLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Padding = new Padding(20, 10, 20, 10),
+            Margin = new Padding(0)
+        };
+        headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        headerLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        headerLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
         var lblTitle = new Label
         {
             Text = "Report Generator",
             Font = new Font("Segoe UI", 16f, FontStyle.Bold),
             ForeColor = TextDark,
-            AutoSize = false,
-            Size = new Size(500, 36),
-            Location = new Point(20, 10),
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, 4),
             TextAlign = ContentAlignment.MiddleLeft
         };
 
         var lblSub = new Label
         {
             Text = "Generate detailed nutrition reports asynchronously. " +
-                        "The UI stays fully responsive during generation. " +
-                        "Output formats: TXT and JSON.",
+                   "The UI stays fully responsive during generation. " +
+                   "Output formats: TXT and JSON.",
             Font = new Font("Segoe UI", 9f),
             ForeColor = TextMuted,
-            AutoSize = false,
-            Size = new Size(700, 20),
-            Location = new Point(20, 50),
+            AutoSize = true,
+            Margin = new Padding(0),
             TextAlign = ContentAlignment.MiddleLeft
         };
 
-        _headerPanel.Controls.AddRange(new Control[] { lblTitle, lblSub });
+        headerLayout.Controls.Add(lblTitle, 0, 0);
+        headerLayout.Controls.Add(lblSub, 0, 1);
+        _headerPanel.Controls.Add(headerLayout);
     }
 
     // ── Config Panel ──────────────────────────────────────────────────────────
@@ -180,7 +202,8 @@ public class ReportsForm : UserControl
         {
             Dock = DockStyle.Fill,
             BackColor = BgColor,
-            Padding = new Padding(20, 14, 20, 0)
+            Padding = new Padding(20, 14, 20, 0),
+            Margin = new Padding(0)
         };
 
         var configLayout = new TableLayoutPanel
@@ -188,7 +211,8 @@ public class ReportsForm : UserControl
             Dock = DockStyle.Fill,
             ColumnCount = 2,
             RowCount = 1,
-            BackColor = BgColor
+            BackColor = BgColor,
+            Margin = new Padding(0)
         };
         configLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55f));
         configLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45f));
@@ -213,57 +237,95 @@ public class ReportsForm : UserControl
 
         card.Paint += (s, e) => PaintCard(e.Graphics, card, TealAccent);
 
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 7,
+            Padding = new Padding(16, 12, 16, 16),
+            Margin = new Padding(0)
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        for (int i = 0; i < 7; i++) layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        int row = 0;
+
         var lblTitle = new Label
         {
             Text = "⚙  Report Settings",
             Font = new Font("Segoe UI", 10f, FontStyle.Bold),
             ForeColor = TextDark,
-            AutoSize = false,
-            Size = new Size(400, 26),
-            Location = new Point(16, 12),
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, 16),
             TextAlign = ContentAlignment.MiddleLeft
         };
+        layout.Controls.Add(lblTitle, 0, row++);
 
         // Report type
-        card.Controls.Add(MakeFieldLabel("REPORT TYPE", new Point(16, 46)));
+        var lblReportType = MakeFieldLabel("REPORT TYPE");
+        lblReportType.Margin = new Padding(0, 0, 0, 4);
+        layout.Controls.Add(lblReportType, 0, row++);
+
         _cmbReportType = new ComboBox
         {
             Font = new Font("Segoe UI", 10f),
             DropDownStyle = ComboBoxStyle.DropDownList,
-            Location = new Point(16, 66),
+            Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top,
             BackColor = Color.FromArgb(246, 248, 252),
             ForeColor = TextDark,
-            FlatStyle = FlatStyle.Flat
+            FlatStyle = FlatStyle.Flat,
+            Margin = new Padding(0, 0, 0, 16)
         };
         _cmbReportType.Items.AddRange(ReportTypes);
         _cmbReportType.SelectedIndex = 0;
-        card.Controls.Add(_cmbReportType);
+        layout.Controls.Add(_cmbReportType, 0, row++);
 
         // Student filter
-        card.Controls.Add(MakeFieldLabel("STUDENT (OPTIONAL — blank = all)", new Point(16, 106)));
+        var lblStudent = MakeFieldLabel("STUDENT (OPTIONAL — blank = all)");
+        lblStudent.Margin = new Padding(0, 0, 0, 4);
+        layout.Controls.Add(lblStudent, 0, row++);
+
         _cmbStudent = new ComboBox
         {
             Font = new Font("Segoe UI", 10f),
             DropDownStyle = ComboBoxStyle.DropDownList,
-            Location = new Point(16, 126),
+            Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top,
             BackColor = Color.FromArgb(246, 248, 252),
             ForeColor = TextDark,
             FlatStyle = FlatStyle.Flat,
-            DisplayMember = "FullName"
+            DisplayMember = "FullName",
+            Margin = new Padding(0, 0, 0, 16)
         };
-        card.Controls.Add(_cmbStudent);
+        layout.Controls.Add(_cmbStudent, 0, row++);
 
         // Date range row
-        card.Controls.Add(MakeFieldLabel("FROM", new Point(16, 166)));
-        card.Controls.Add(MakeFieldLabel("TO", new Point(196, 166)));
+        var datesLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            ColumnCount = 2,
+            RowCount = 2,
+            Margin = new Padding(0),
+            AutoSize = true
+        };
+        datesLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+        datesLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+        datesLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        datesLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        var lblFrom = MakeFieldLabel("FROM");
+        lblFrom.Margin = new Padding(0, 0, 8, 4);
+        var lblTo = MakeFieldLabel("TO");
+        lblTo.Margin = new Padding(8, 0, 0, 4);
+        datesLayout.Controls.Add(lblFrom, 0, 0);
+        datesLayout.Controls.Add(lblTo, 1, 0);
 
         _dtpFrom = new DateTimePicker
         {
             Format = DateTimePickerFormat.Short,
             Font = new Font("Segoe UI", 9.5f),
             Value = DateTime.Today.AddDays(-30),
-            Location = new Point(16, 186),
-            Size = new Size(160, 32)
+            Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top,
+            Margin = new Padding(0, 0, 8, 0)
         };
 
         _dtpTo = new DateTimePicker
@@ -271,26 +333,16 @@ public class ReportsForm : UserControl
             Format = DateTimePickerFormat.Short,
             Font = new Font("Segoe UI", 9.5f),
             Value = DateTime.Today,
-            Location = new Point(196, 186),
-            Size = new Size(160, 32)
+            Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top,
+            Margin = new Padding(8, 0, 0, 0)
         };
 
-        card.Controls.AddRange(new Control[] { _dtpFrom, _dtpTo });
+        datesLayout.Controls.Add(_dtpFrom, 0, 1);
+        datesLayout.Controls.Add(_dtpTo, 1, 1);
 
-        // Resize to fill width
-        card.Resize += (_, _) =>
-        {
-            int w = card.Width - 32;
-            if (w < 80) return;
-            _cmbReportType.Width = w;
-            _cmbStudent.Width = w;
-            int half = (w - 8) / 2;
-            _dtpFrom.Width = half;
-            _dtpTo.Location = new Point(16 + half + 8, 186);
-            _dtpTo.Width = half;
-        };
+        layout.Controls.Add(datesLayout, 0, row++);
 
-        card.Controls.Add(lblTitle);
+        card.Controls.Add(layout);
         return card;
     }
 
@@ -307,19 +359,34 @@ public class ReportsForm : UserControl
 
         card.Paint += (s, e) => PaintCard(e.Graphics, card, StatBlue);
 
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 10,
+            Padding = new Padding(16, 12, 16, 16),
+            Margin = new Padding(0)
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        for (int i = 0; i < 10; i++) layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        int row = 0;
+
         var lblTitle = new Label
         {
             Text = "📤  Output Options",
             Font = new Font("Segoe UI", 10f, FontStyle.Bold),
             ForeColor = TextDark,
-            AutoSize = false,
-            Size = new Size(400, 26),
-            Location = new Point(16, 12),
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, 16),
             TextAlign = ContentAlignment.MiddleLeft
         };
+        layout.Controls.Add(lblTitle, 0, row++);
 
         // Format checkboxes
-        card.Controls.Add(MakeFieldLabel("OUTPUT FORMAT", new Point(16, 46)));
+        var lblFormat = MakeFieldLabel("OUTPUT FORMAT");
+        lblFormat.Margin = new Padding(0, 0, 0, 4);
+        layout.Controls.Add(lblFormat, 0, row++);
 
         _chkTxt = new CheckBox
         {
@@ -327,9 +394,10 @@ public class ReportsForm : UserControl
             Font = new Font("Segoe UI", 10f),
             ForeColor = TextDark,
             Checked = true,
-            Location = new Point(16, 68),
-            AutoSize = true
+            AutoSize = true,
+            Margin = new Padding(0, 4, 0, 4)
         };
+        layout.Controls.Add(_chkTxt, 0, row++);
 
         _chkJson = new CheckBox
         {
@@ -337,25 +405,38 @@ public class ReportsForm : UserControl
             Font = new Font("Segoe UI", 10f),
             ForeColor = TextDark,
             Checked = true,
-            Location = new Point(16, 96),
-            AutoSize = true
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, 16)
         };
+        layout.Controls.Add(_chkJson, 0, row++);
 
         // Output directory
-        card.Controls.Add(MakeFieldLabel("OUTPUT DIRECTORY", new Point(16, 128)));
+        var lblDir = MakeFieldLabel("OUTPUT DIRECTORY");
+        lblDir.Margin = new Padding(0, 0, 0, 4);
+        layout.Controls.Add(lblDir, 0, row++);
 
         var dirRow = new Panel
         {
-            Location = new Point(16, 148),
+            Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top,
             Height = 36,
-            BackColor = Color.FromArgb(246, 248, 252)
+            BackColor = Color.FromArgb(246, 248, 252),
+            Margin = new Padding(0, 0, 0, 16)
         };
         dirRow.Paint += (s, e) =>
         {
             using var pen = new Pen(BorderLight, 1);
-            e.Graphics.DrawRectangle(pen, 0, 0,
-                dirRow.Width - 1, dirRow.Height - 1);
+            e.Graphics.DrawRectangle(pen, 0, 0, dirRow.Width - 1, dirRow.Height - 1);
         };
+
+        var dirLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            Margin = new Padding(0)
+        };
+        dirLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        dirLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
         _txtOutputDir = new TextBox
         {
@@ -365,8 +446,8 @@ public class ReportsForm : UserControl
             BorderStyle = BorderStyle.None,
             Dock = DockStyle.Fill,
             Padding = new Padding(8, 0, 0, 0),
-            Text = Environment.GetFolderPath(
-                Environment.SpecialFolder.MyDocuments)
+            Margin = new Padding(8, 10, 0, 0),
+            Text = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
         };
 
         _btnBrowseDir = new Button
@@ -378,70 +459,69 @@ public class ReportsForm : UserControl
             FlatStyle = FlatStyle.Flat,
             Size = new Size(70, 36),
             Dock = DockStyle.Right,
-            Cursor = Cursors.Hand
+            Cursor = Cursors.Hand,
+            Margin = new Padding(0)
         };
         _btnBrowseDir.FlatAppearance.BorderSize = 0;
         _btnBrowseDir.Click += BrowseOutputDir;
 
-        dirRow.Controls.Add(_txtOutputDir);
-        dirRow.Controls.Add(_btnBrowseDir);
+        dirLayout.Controls.Add(_txtOutputDir, 0, 0);
+        dirLayout.Controls.Add(_btnBrowseDir, 1, 0);
+        dirRow.Controls.Add(dirLayout);
+        layout.Controls.Add(dirRow, 0, row++);
 
         // Progress bar
         _progressBar = new ProgressBar
         {
             Style = ProgressBarStyle.Marquee,
-            Location = new Point(16, 198),
+            Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top,
             Height = 6,
             Visible = false,
-            MarqueeAnimationSpeed = 30
+            MarqueeAnimationSpeed = 30,
+            Margin = new Padding(0, 0, 0, 4)
         };
+        layout.Controls.Add(_progressBar, 0, row++);
 
         _lblProgress = new Label
         {
             Text = string.Empty,
             Font = new Font("Segoe UI", 8f),
             ForeColor = TealAccent,
-            Location = new Point(16, 210),
-            AutoSize = false,
-            Height = 18
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, 16)
         };
+        layout.Controls.Add(_lblProgress, 0, row++);
+
+        // Flexible spacer to push buttons to the bottom
+        layout.RowStyles[row] = new RowStyle(SizeType.Percent, 100f);
+        layout.Controls.Add(new Panel { Dock = DockStyle.Fill, Margin = new Padding(0) }, 0, row++);
 
         // Action buttons
-        _btnPreview = MakeButton(
-            "👁  Preview", Color.FromArgb(240, 244, 248), TextMid, 110);
-        _btnPreview.Location = new Point(16, 232);
+        var btnFlow = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Right,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            AutoSize = true,
+            Margin = new Padding(0)
+        };
+
+        _btnPreview = MakeButton("👁  Preview", Color.FromArgb(240, 244, 248), TextMid, 110);
         _btnPreview.FlatAppearance.BorderSize = 1;
         _btnPreview.FlatAppearance.BorderColor = BorderLight;
+        _btnPreview.Margin = new Padding(0, 0, 16, 0);
 
-        _btnGenerate = MakeButton(
-            "▶  Generate Report", TealAccent, Color.White, 160);
-        _btnGenerate.Location = new Point(134, 232);
+        _btnGenerate = MakeButton("▶  Generate Report", TealAccent, Color.White, 160);
+        _btnGenerate.Margin = new Padding(0);
 
-        card.Resize += (_, _) =>
-        {
-            int w = card.Width - 32;
-            if (w < 80) return;
-            dirRow.Width = w;
-            _progressBar.Width = w;
-            _lblProgress.Width = w;
-
-            // Anchor buttons to right
-            _btnGenerate.Location = new Point(
-                card.Width - _btnGenerate.Width - 16, 232);
-            _btnPreview.Location = new Point(
-                card.Width - _btnGenerate.Width - _btnPreview.Width - 24, 232);
-        };
+        btnFlow.Controls.Add(_btnPreview);
+        btnFlow.Controls.Add(_btnGenerate);
+        layout.Controls.Add(btnFlow, 0, row++);
 
         _btnPreview.Click += async (_, _) => await RunPreviewAsync();
         _btnGenerate.Click += async (_, _) => await RunGenerateAsync();
 
-        card.Controls.AddRange(new Control[]
-        {
-            lblTitle, _chkTxt, _chkJson,
-            dirRow, _progressBar, _lblProgress,
-            _btnPreview, _btnGenerate
-        });
-
+        card.Controls.Add(layout);
         return card;
     }
 
@@ -453,13 +533,15 @@ public class ReportsForm : UserControl
         {
             Dock = DockStyle.Fill,
             BackColor = BgColor,
-            Padding = new Padding(20, 12, 20, 0)
+            Padding = new Padding(20, 12, 20, 0),
+            Margin = new Padding(0)
         };
 
         var previewCard = new Panel
         {
             Dock = DockStyle.Fill,
-            BackColor = PreviewBg
+            BackColor = PreviewBg,
+            Margin = new Padding(0)
         };
 
         previewCard.Paint += (s, e) =>
@@ -477,7 +559,8 @@ public class ReportsForm : UserControl
             Dock = DockStyle.Top,
             Height = 34,
             BackColor = Color.FromArgb(15, 24, 40),
-            Padding = new Padding(14, 0, 14, 0)
+            Padding = new Padding(14, 0, 14, 0),
+            Margin = new Padding(0)
         };
 
         previewHeader.Paint += (s, e) =>
@@ -487,15 +570,25 @@ public class ReportsForm : UserControl
                 previewHeader.Width, previewHeader.Height - 1);
         };
 
+        var headerLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            Margin = new Padding(0)
+        };
+        headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+
         _lblPreviewTitle = new Label
         {
             Text = "●  REPORT PREVIEW",
             Font = new Font("Segoe UI", 8f, FontStyle.Bold),
             ForeColor = TealAccent,
             AutoSize = true,
-            Location = new Point(0, 0),
-            Height = 34,
-            TextAlign = ContentAlignment.MiddleLeft
+            Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Bottom,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Margin = new Padding(0)
         };
 
         var btnClearPreview = new Button
@@ -507,7 +600,9 @@ public class ReportsForm : UserControl
             FlatStyle = FlatStyle.Flat,
             Size = new Size(48, 22),
             Cursor = Cursors.Hand,
-            TabStop = false
+            TabStop = false,
+            Anchor = AnchorStyles.Right,
+            Margin = new Padding(0)
         };
         btnClearPreview.FlatAppearance.BorderSize = 0;
         btnClearPreview.Click += (_, _) =>
@@ -516,12 +611,9 @@ public class ReportsForm : UserControl
             _lblPreviewTitle.Text = "●  REPORT PREVIEW";
         };
 
-        previewHeader.Controls.Add(_lblPreviewTitle);
-        previewHeader.Resize += (_, _) =>
-            btnClearPreview.Location = new Point(
-                previewHeader.Width - btnClearPreview.Width - 14,
-                (previewHeader.Height - btnClearPreview.Height) / 2);
-        previewHeader.Controls.Add(btnClearPreview);
+        headerLayout.Controls.Add(_lblPreviewTitle, 0, 0);
+        headerLayout.Controls.Add(btnClearPreview, 1, 0);
+        previewHeader.Controls.Add(headerLayout);
 
         _rtbPreview = new RichTextBox
         {
@@ -553,7 +645,8 @@ public class ReportsForm : UserControl
         {
             Dock = DockStyle.Fill,
             BackColor = Color.FromArgb(245, 248, 252),
-            Padding = new Padding(16, 0, 16, 0)
+            Padding = new Padding(16, 0, 16, 0),
+            Margin = new Padding(0)
         };
 
         _statusBar.Paint += (s, e) =>
@@ -562,15 +655,25 @@ public class ReportsForm : UserControl
             e.Graphics.DrawLine(pen, 0, 0, _statusBar.Width, 0);
         };
 
+        var statusLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            Margin = new Padding(0)
+        };
+        statusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+        statusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+
         _lblLastReport = new Label
         {
             Text = "No reports generated this session.",
             Font = new Font("Segoe UI", 8.5f),
             ForeColor = TextMuted,
             AutoSize = true,
-            Location = new Point(0, 0),
-            Height = 36,
-            TextAlign = ContentAlignment.MiddleLeft
+            Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Bottom,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Margin = new Padding(0)
         };
 
         _lblStatus = new Label
@@ -579,14 +682,14 @@ public class ReportsForm : UserControl
             Font = new Font("Segoe UI", 8.5f),
             ForeColor = TealAccent,
             AutoSize = true,
-            Height = 36,
-            TextAlign = ContentAlignment.MiddleLeft
+            Anchor = AnchorStyles.Right | AnchorStyles.Top | AnchorStyles.Bottom,
+            TextAlign = ContentAlignment.MiddleRight,
+            Margin = new Padding(0)
         };
 
-        _statusBar.Controls.AddRange(new Control[] { _lblLastReport, _lblStatus });
-        _statusBar.Resize += (_, _) =>
-            _lblStatus.Location = new Point(
-                _statusBar.Width - _lblStatus.Width - 16, 0);
+        statusLayout.Controls.Add(_lblLastReport, 0, 0);
+        statusLayout.Controls.Add(_lblStatus, 1, 0);
+        _statusBar.Controls.Add(statusLayout);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -620,7 +723,7 @@ public class ReportsForm : UserControl
 
     private async Task RunPreviewAsync()
     {
-        SetLoading(true, "Generating preview…");
+        await SetLoadingAsync(true, "Generating preview…");
         _rtbPreview.Clear();
 
         try
@@ -650,7 +753,7 @@ public class ReportsForm : UserControl
         }
         finally
         {
-            SetLoading(false, string.Empty);
+            await SetLoadingAsync(false, string.Empty);
             _cts?.Dispose();
             _cts = null;
         }
@@ -683,7 +786,7 @@ public class ReportsForm : UserControl
             return;
         }
 
-        SetLoading(true, "Generating report…");
+        await SetLoadingAsync(true, "Generating report…");
         _rtbPreview.Clear();
         SetStatus("Generating report files…", TextMuted);
 
@@ -707,7 +810,7 @@ public class ReportsForm : UserControl
             // Write TXT asynchronously
             if (_chkTxt.Checked)
             {
-                UpdateProgress("Writing TXT file…");
+                await UpdateProgressAsync("Writing TXT file…");
                 string txtPath = Path.Combine(outputDir, baseName + ".txt");
                 string txtContent = await Task.Run(
                     () => BuildTxtReport(reportData),
@@ -722,7 +825,7 @@ public class ReportsForm : UserControl
             // Write JSON asynchronously
             if (_chkJson.Checked)
             {
-                UpdateProgress("Writing JSON file…");
+                await UpdateProgressAsync("Writing JSON file…");
                 string jsonPath = Path.Combine(outputDir, baseName + ".json");
                 string jsonContent = await Task.Run(
                     () => BuildJsonReport(reportData),
@@ -762,7 +865,7 @@ public class ReportsForm : UserControl
         }
         finally
         {
-            SetLoading(false, string.Empty);
+            await SetLoadingAsync(false, string.Empty);
             _cts?.Dispose();
             _cts = null;
         }
@@ -967,7 +1070,7 @@ public class ReportsForm : UserControl
         {
             string status = a.Status == NutritionStatus.Malnourished
                 ? "*** MALNOURISHED ***"
-                : "**  AT-RISK  **";
+                : "** AT-RISK  **";
 
             sb.AppendLine($"  {status}");
             sb.AppendLine($"  Student  : {a.StudentName}  (Age {a.Age}, {a.Gender})");
@@ -1242,7 +1345,7 @@ public class ReportsForm : UserControl
         _rtbPreview.ScrollToCaret();
     }
 
-    private void SetLoading(bool loading, string progressText)
+    private async Task SetLoadingAsync(bool loading, string progressText)
     {
         _btnGenerate.Enabled = !loading;
         _btnPreview.Enabled = !loading;
@@ -1250,21 +1353,19 @@ public class ReportsForm : UserControl
         _lblProgress.Text = progressText;
         _btnGenerate.Text = loading ? "Generating…" : "▶  Generate Report";
         _btnPreview.Text = loading ? "Working…" : "👁  Preview";
-        Application.DoEvents();
+        await Task.Yield();
     }
 
-    private void UpdateProgress(string message)
+    private async Task UpdateProgressAsync(string message)
     {
         _lblProgress.Text = message;
-        Application.DoEvents();
+        await Task.Yield();
     }
 
     private void SetStatus(string msg, Color color)
     {
         _lblStatus.ForeColor = color;
         _lblStatus.Text = msg;
-        _lblStatus.Location = new Point(
-            _statusBar.Width - _lblStatus.Width - 16, 0);
     }
 
     private void BrowseOutputDir(object? sender, EventArgs e)
@@ -1307,14 +1408,12 @@ public class ReportsForm : UserControl
         return btn;
     }
 
-    private static Label MakeFieldLabel(string text, Point location) => new()
+    private static Label MakeFieldLabel(string text) => new()
     {
         Text = text,
         Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
         ForeColor = TextMuted,
-        AutoSize = false,
-        Size = new Size(300, 18),
-        Location = location,
+        AutoSize = true,
         TextAlign = ContentAlignment.BottomLeft
     };
 

@@ -1,4 +1,12 @@
-﻿using NutritionMonitor.UI.Utilities;
+﻿// File Path: NutritionMonitor.UI/Forms/Logs/ErrorLogViewerForm.cs
+using NutritionMonitor.UI.Utilities;
+using System.Drawing;
+using System.Windows.Forms;
+using System.Collections.Generic;
+using System;
+using System.Threading.Tasks;
+using System.Linq;
+using System.IO;
 using SerilogLog = Serilog.Log;
 
 namespace NutritionMonitor.UI.Forms.Logs;
@@ -86,11 +94,12 @@ public class ErrorLogViewerForm : UserControl
             RowCount = 5,
             ColumnCount = 1,
             BackColor = BgColor,
-            Padding = new Padding(0)
+            Padding = new Padding(0),
+            Margin = new Padding(0)
         };
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 76f));  // header
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56f));  // toolbar
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48f));  // stats strip
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 60f));  // stats strip
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f)); // log viewer
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36f));  // status bar
 
@@ -116,7 +125,8 @@ public class ErrorLogViewerForm : UserControl
         _headerPanel = new Panel
         {
             Dock = DockStyle.Fill,
-            BackColor = CardBg
+            BackColor = CardBg,
+            Margin = new Padding(0)
         };
 
         _headerPanel.Paint += (s, e) =>
@@ -136,30 +146,42 @@ public class ErrorLogViewerForm : UserControl
                 _headerPanel.Width, _headerPanel.Height - 1);
         };
 
+        var headerLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Padding = new Padding(20, 10, 20, 10),
+            Margin = new Padding(0)
+        };
+        headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        headerLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        headerLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
         var lblTitle = new Label
         {
             Text = "Application Log Viewer",
             Font = new Font("Segoe UI", 16f, FontStyle.Bold),
             ForeColor = TextDark,
-            AutoSize = false,
-            Size = new Size(500, 36),
-            Location = new Point(20, 10),
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, 4),
             TextAlign = ContentAlignment.MiddleLeft
         };
 
         var lblSub = new Label
         {
             Text = "Real-time view of Serilog rolling log files.  " +
-                        "Logs are stored in AppData\\NutritionMonitor\\Logs\\",
+                   "Logs are stored in AppData\\NutritionMonitor\\Logs\\",
             Font = new Font("Segoe UI", 9f),
             ForeColor = TextMuted,
-            AutoSize = false,
-            Size = new Size(700, 20),
-            Location = new Point(20, 50),
+            AutoSize = true,
+            Margin = new Padding(0),
             TextAlign = ContentAlignment.MiddleLeft
         };
 
-        _headerPanel.Controls.AddRange(new Control[] { lblTitle, lblSub });
+        headerLayout.Controls.Add(lblTitle, 0, 0);
+        headerLayout.Controls.Add(lblSub, 0, 1);
+        _headerPanel.Controls.Add(headerLayout);
     }
 
     // ── Toolbar ───────────────────────────────────────────────────────────────
@@ -170,7 +192,8 @@ public class ErrorLogViewerForm : UserControl
         {
             Dock = DockStyle.Fill,
             BackColor = CardBg,
-            Padding = new Padding(0)
+            Padding = new Padding(0),
+            Margin = new Padding(0)
         };
 
         _toolbarPanel.Paint += (s, e) =>
@@ -185,7 +208,8 @@ public class ErrorLogViewerForm : UserControl
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
-            Padding = new Padding(14, 8, 14, 8)
+            Padding = new Padding(14, 8, 14, 8),
+            Margin = new Padding(0)
         };
 
         // Log file combo
@@ -279,7 +303,8 @@ public class ErrorLogViewerForm : UserControl
         {
             Dock = DockStyle.Fill,
             BackColor = Color.FromArgb(22, 32, 50),
-            Padding = new Padding(16, 0, 16, 0)
+            Padding = new Padding(16, 0, 16, 0),
+            Margin = new Padding(0)
         };
 
         _statsPanel.Paint += (s, e) =>
@@ -287,6 +312,17 @@ public class ErrorLogViewerForm : UserControl
             using var pen = new Pen(Color.FromArgb(40, 60, 90), 1);
             e.Graphics.DrawLine(pen, 0, _statsPanel.Height - 1,
                 _statsPanel.Width, _statsPanel.Height - 1);
+        };
+
+        // Rule 3: FlowLayoutPanel for horizontal layout
+        var flow = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            AutoSize = false,
+            Padding = new Padding(0, 8, 0, 0),
+            Margin = new Padding(0)
         };
 
         _lblTotalCount = MakeStatLabel("—", TextMuted);
@@ -304,26 +340,39 @@ public class ErrorLogViewerForm : UserControl
             ("FTL",          _lblFatalCount, LogFatal),
         };
 
-        int x = 0;
         foreach (var (title, valLbl, color) in headers)
         {
+            // Rule 2: TableLayoutPanel for vertical stacking inside the strip
+            var block = new TableLayoutPanel
+            {
+                ColumnCount = 1,
+                RowCount = 2,
+                AutoSize = true,
+                Margin = new Padding(0, 0, 48, 0)
+            };
+            block.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            block.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            block.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
             var titleLbl = new Label
             {
                 Text = title.ToUpperInvariant(),
                 Font = new Font("Segoe UI", 7f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(80, 110, 100),
-                AutoSize = false,
-                Size = new Size(100, 18),
-                Location = new Point(x, 6),
-                TextAlign = ContentAlignment.BottomLeft
+                AutoSize = true,
+                Margin = new Padding(0, 0, 0, 4),
+                TextAlign = ContentAlignment.MiddleLeft
             };
-            valLbl.Location = new Point(x, 26);
-            valLbl.ForeColor = color;
 
-            _statsPanel.Controls.Add(titleLbl);
-            _statsPanel.Controls.Add(valLbl);
-            x += 140;
+            valLbl.ForeColor = color;
+            valLbl.Margin = new Padding(0);
+
+            block.Controls.Add(titleLbl, 0, 0);
+            block.Controls.Add(valLbl, 0, 1);
+            flow.Controls.Add(block);
         }
+
+        _statsPanel.Controls.Add(flow);
     }
 
     // ── Log Viewer ────────────────────────────────────────────────────────────
@@ -334,13 +383,15 @@ public class ErrorLogViewerForm : UserControl
         {
             Dock = DockStyle.Fill,
             BackColor = BgColor,
-            Padding = new Padding(20, 10, 20, 0)
+            Padding = new Padding(20, 10, 20, 0),
+            Margin = new Padding(0)
         };
 
         var logCard = new Panel
         {
             Dock = DockStyle.Fill,
-            BackColor = LogBg
+            BackColor = LogBg,
+            Margin = new Padding(0)
         };
 
         logCard.Paint += (s, e) =>
@@ -356,7 +407,8 @@ public class ErrorLogViewerForm : UserControl
         {
             Dock = DockStyle.Top,
             Height = 32,
-            BackColor = Color.FromArgb(15, 24, 40)
+            BackColor = Color.FromArgb(15, 24, 40),
+            Margin = new Padding(0)
         };
 
         logHeader.Paint += (s, e) =>
@@ -366,17 +418,27 @@ public class ErrorLogViewerForm : UserControl
                 logHeader.Width, logHeader.Height - 1);
         };
 
+        var headerLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            Margin = new Padding(0),
+            Padding = new Padding(14, 0, 14, 0)
+        };
+        headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+
         var lblLogHeader = new Label
         {
             Text = "●  LOG OUTPUT",
             Font = new Font("Segoe UI", 8f, FontStyle.Bold),
             ForeColor = TealAccent,
             AutoSize = true,
-            Location = new Point(14, 0),
-            Height = 32,
-            TextAlign = ContentAlignment.MiddleLeft
+            Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Bottom,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Margin = new Padding(0)
         };
-        logHeader.Controls.Add(lblLogHeader);
 
         var lblScrollTip = new Label
         {
@@ -384,18 +446,18 @@ public class ErrorLogViewerForm : UserControl
             Font = new Font("Segoe UI", 7.5f, FontStyle.Italic),
             ForeColor = LogMuted,
             AutoSize = true,
-            Height = 32,
-            TextAlign = ContentAlignment.MiddleLeft
+            Anchor = AnchorStyles.Right | AnchorStyles.Top | AnchorStyles.Bottom,
+            TextAlign = ContentAlignment.MiddleRight,
+            Margin = new Padding(0)
         };
-        logHeader.Controls.Add(lblScrollTip);
-        logHeader.Resize += (_, _) =>
-            lblScrollTip.Location = new Point(
-                logHeader.Width - lblScrollTip.Width - 14,
-                (logHeader.Height - lblScrollTip.Height) / 2);
+
+        headerLayout.Controls.Add(lblLogHeader, 0, 0);
+        headerLayout.Controls.Add(lblScrollTip, 1, 0);
+        logHeader.Controls.Add(headerLayout);
 
         _rtbLog = new RichTextBox
         {
-            Dock = DockStyle.Fill,
+            Dock = DockStyle.Fill, // Rule 12: RichTextBox fills remaining space
             BackColor = LogBg,
             ForeColor = LogText,
             Font = new Font("Consolas", 9f),
@@ -403,7 +465,8 @@ public class ErrorLogViewerForm : UserControl
             ReadOnly = true,
             ScrollBars = RichTextBoxScrollBars.Both,
             Padding = new Padding(12, 6, 12, 6),
-            WordWrap = false
+            WordWrap = false,
+            Margin = new Padding(0)
         };
 
         logCard.Controls.Add(_rtbLog);
@@ -419,7 +482,8 @@ public class ErrorLogViewerForm : UserControl
         {
             Dock = DockStyle.Fill,
             BackColor = Color.FromArgb(245, 248, 252),
-            Padding = new Padding(16, 0, 16, 0)
+            Padding = new Padding(16, 0, 16, 0),
+            Margin = new Padding(0)
         };
 
         _statusBar.Paint += (s, e) =>
@@ -428,15 +492,25 @@ public class ErrorLogViewerForm : UserControl
             e.Graphics.DrawLine(pen, 0, 0, _statusBar.Width, 0);
         };
 
+        var statusLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            Margin = new Padding(0)
+        };
+        statusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+        statusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+
         _lblFileInfo = new Label
         {
             Text = "No log file loaded.",
             Font = new Font("Segoe UI", 8.5f),
             ForeColor = TextMuted,
             AutoSize = true,
-            Location = new Point(0, 0),
-            Height = 36,
-            TextAlign = ContentAlignment.MiddleLeft
+            Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Bottom,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Margin = new Padding(0)
         };
 
         _lblStatus = new Label
@@ -445,14 +519,14 @@ public class ErrorLogViewerForm : UserControl
             Font = new Font("Segoe UI", 8.5f),
             ForeColor = TealAccent,
             AutoSize = true,
-            Height = 36,
-            TextAlign = ContentAlignment.MiddleLeft
+            Anchor = AnchorStyles.Right | AnchorStyles.Top | AnchorStyles.Bottom,
+            TextAlign = ContentAlignment.MiddleRight,
+            Margin = new Padding(0)
         };
 
-        _statusBar.Controls.AddRange(new Control[] { _lblFileInfo, _lblStatus });
-        _statusBar.Resize += (_, _) =>
-            _lblStatus.Location = new Point(
-                _statusBar.Width - _lblStatus.Width - 16, 0);
+        statusLayout.Controls.Add(_lblFileInfo, 0, 0);
+        statusLayout.Controls.Add(_lblStatus, 1, 0);
+        _statusBar.Controls.Add(statusLayout);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -689,8 +763,7 @@ public class ErrorLogViewerForm : UserControl
     {
         _lblStatus.ForeColor = color;
         _lblStatus.Text = msg;
-        _lblStatus.Location = new Point(
-            _statusBar.Width - _lblStatus.Width - 16, 0);
+        // Relying on AnchorStyles.Right in TableLayoutPanel now
     }
 
     private static Label MakeStatLabel(string text, Color color) => new()

@@ -1,8 +1,12 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿// File Path: NutritionMonitor.UI/Forms/Backup/BackupForm.cs
+using Microsoft.Extensions.DependencyInjection;
 using NutritionMonitor.Models.Interfaces;
 using NutritionMonitor.UI.Session;
-using static OpenTK.Graphics.OpenGL.GL;
 using SerilogLog = Serilog.Log;
+using System.Drawing;
+using System.Windows.Forms;
+using System;
+using System.Threading.Tasks;
 
 namespace NutritionMonitor.UI.Forms.Backup;
 
@@ -83,10 +87,11 @@ public class BackupForm : UserControl
             RowCount = 4,
             ColumnCount = 1,
             BackColor = BgColor,
-            Padding = new Padding(0)
+            Padding = new Padding(0),
+            Margin = new Padding(0)
         };
         _outerLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 80f));   // header
-        _outerLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 260f));  // cards row
+        _outerLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 300f));  // cards row (increased slightly to accommodate stacking)
         _outerLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));   // activity log
         _outerLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36f));   // status bar
 
@@ -110,7 +115,8 @@ public class BackupForm : UserControl
         _headerPanel = new Panel
         {
             Dock = DockStyle.Fill,
-            BackColor = CardBg
+            BackColor = CardBg,
+            Margin = new Padding(0)
         };
 
         _headerPanel.Paint += (s, e) =>
@@ -136,31 +142,43 @@ public class BackupForm : UserControl
                 _headerPanel.Width, _headerPanel.Height - 1);
         };
 
+        var headerLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Padding = new Padding(20, 12, 20, 12),
+            Margin = new Padding(0)
+        };
+        headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        headerLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        headerLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
         var lblTitle = new Label
         {
             Text = "Backup & Restore",
             Font = new Font("Segoe UI", 16f, FontStyle.Bold),
             ForeColor = TextDark,
-            AutoSize = false,
-            Size = new Size(500, 36),
-            Location = new Point(20, 12),
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, 4),
             TextAlign = ContentAlignment.MiddleLeft
         };
 
         var lblSub = new Label
         {
             Text = "Export all student and meal log records to a JSON file, " +
-                        "or restore data from a previous backup.  " +
-                        "⚠  Import will attempt to add records — duplicates are skipped.",
+                   "or restore data from a previous backup.  " +
+                   "⚠  Import will attempt to add records — duplicates are skipped.",
             Font = new Font("Segoe UI", 9f),
             ForeColor = TextMuted,
-            AutoSize = false,
-            Size = new Size(700, 22),
-            Location = new Point(20, 52),
+            AutoSize = true,
+            Margin = new Padding(0),
             TextAlign = ContentAlignment.MiddleLeft
         };
 
-        _headerPanel.Controls.AddRange(new Control[] { lblTitle, lblSub });
+        headerLayout.Controls.Add(lblTitle, 0, 0);
+        headerLayout.Controls.Add(lblSub, 0, 1);
+        _headerPanel.Controls.Add(headerLayout);
     }
 
     // ── Cards Row ─────────────────────────────────────────────────────────────
@@ -171,7 +189,8 @@ public class BackupForm : UserControl
         {
             Dock = DockStyle.Fill,
             BackColor = BgColor,
-            Padding = new Padding(20, 16, 20, 0)
+            Padding = new Padding(20, 16, 20, 0),
+            Margin = new Padding(0)
         };
 
         var cardsLayout = new TableLayoutPanel
@@ -179,7 +198,8 @@ public class BackupForm : UserControl
             Dock = DockStyle.Fill,
             ColumnCount = 2,
             RowCount = 1,
-            BackColor = BgColor
+            BackColor = BgColor,
+            Margin = new Padding(0)
         };
         cardsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
         cardsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
@@ -206,7 +226,34 @@ public class BackupForm : UserControl
 
         card.Paint += (s, e) => PaintCard(e.Graphics, card, TealAccent);
 
-        // Icon area
+        // Vertical Stacking
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 5,
+            Padding = new Padding(20, 16, 20, 16),
+            Margin = new Padding(0)
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // Header (Icon + Title)
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // Spacer/Label
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // Path row
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f)); // Spacer for status
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // Button
+
+        // Icon + Title Layout
+        var headerLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            ColumnCount = 2,
+            RowCount = 2,
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, 16)
+        };
+        headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 68f));
+        headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+
         var iconLbl = new Label
         {
             Text = "💾",
@@ -214,19 +261,18 @@ public class BackupForm : UserControl
             ForeColor = TealAccent,
             AutoSize = false,
             Size = new Size(60, 60),
-            Location = new Point(20, 16),
-            TextAlign = ContentAlignment.MiddleCenter
+            TextAlign = ContentAlignment.MiddleCenter,
+            Margin = new Padding(0)
         };
+        headerLayout.SetRowSpan(iconLbl, 2);
 
         var lblCardTitle = new Label
         {
             Text = "Export Backup",
             Font = new Font("Segoe UI", 13f, FontStyle.Bold),
             ForeColor = TextDark,
-            AutoSize = false,
-            Size = new Size(300, 28),
-            Location = new Point(88, 16),
-            TextAlign = ContentAlignment.MiddleLeft
+            AutoSize = true,
+            Margin = new Padding(0, 6, 0, 4)
         };
 
         var lblDesc = new Label
@@ -234,27 +280,43 @@ public class BackupForm : UserControl
             Text = "Exports all students and meal logs\nto a structured JSON backup file.",
             Font = new Font("Segoe UI", 9f),
             ForeColor = TextMuted,
-            AutoSize = false,
-            Size = new Size(300, 38),
-            Location = new Point(88, 46),
-            TextAlign = ContentAlignment.TopLeft
+            AutoSize = true,
+            Margin = new Padding(0)
         };
 
-        // Path row
-        var lblPathLabel = MakeFieldLabel("SAVE TO", new Point(20, 98));
+        headerLayout.Controls.Add(iconLbl, 0, 0);
+        headerLayout.Controls.Add(lblCardTitle, 1, 0);
+        headerLayout.Controls.Add(lblDesc, 1, 1);
+        layout.Controls.Add(headerLayout, 0, 0);
 
+        // Path label
+        var lblPathLabel = MakeFieldLabel("SAVE TO");
+        lblPathLabel.Margin = new Padding(0, 0, 0, 4);
+        layout.Controls.Add(lblPathLabel, 0, 1);
+
+        // Path row
         var pathRow = new Panel
         {
-            Location = new Point(20, 118),
-            Size = new Size(0, 36),
-            BackColor = Color.FromArgb(246, 248, 252)
+            Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top,
+            Height = 36,
+            BackColor = Color.FromArgb(246, 248, 252),
+            Margin = new Padding(0)
         };
         pathRow.Paint += (s, e) =>
         {
             using var pen = new Pen(BorderLight, 1);
-            e.Graphics.DrawRectangle(pen, 0, 0,
-                pathRow.Width - 1, pathRow.Height - 1);
+            e.Graphics.DrawRectangle(pen, 0, 0, pathRow.Width - 1, pathRow.Height - 1);
         };
+
+        var pathLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            Margin = new Padding(0)
+        };
+        pathLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        pathLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
         _lblExportPath = new Label
         {
@@ -264,14 +326,18 @@ public class BackupForm : UserControl
             AutoSize = false,
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
-            Padding = new Padding(8, 0, 0, 0)
+            Padding = new Padding(8, 0, 0, 0),
+            Margin = new Padding(0)
         };
-        pathRow.Controls.Add(_lblExportPath);
 
         _btnBrowseExport = MakeSecondaryButton("Browse…", 80);
-        _btnBrowseExport.Dock = DockStyle.Right;
+        _btnBrowseExport.Anchor = AnchorStyles.Right;
+        _btnBrowseExport.Margin = new Padding(0);
 
-        pathRow.Controls.Add(_btnBrowseExport);
+        pathLayout.Controls.Add(_lblExportPath, 0, 0);
+        pathLayout.Controls.Add(_btnBrowseExport, 1, 0);
+        pathRow.Controls.Add(pathLayout);
+        layout.Controls.Add(pathRow, 0, 2);
 
         // Status label
         _lblExportStatus = new Label
@@ -279,37 +345,24 @@ public class BackupForm : UserControl
             Text = string.Empty,
             Font = new Font("Segoe UI", 8.5f),
             ForeColor = SuccessGreen,
-            AutoSize = false,
-            Size = new Size(0, 18),
-            Location = new Point(20, 162),
-            TextAlign = ContentAlignment.MiddleLeft
+            AutoSize = true,
+            Anchor = AnchorStyles.Bottom | AnchorStyles.Left,
+            Margin = new Padding(0, 0, 0, 8)
         };
+        layout.Controls.Add(_lblExportStatus, 0, 3);
 
         // Export button
         _btnExport = MakePrimaryButton("💾  Export Now", TealAccent, 160);
-        _btnExport.Location = new Point(20, 185);
+        _btnExport.Anchor = AnchorStyles.Left;
+        _btnExport.Margin = new Padding(0);
+
+        layout.Controls.Add(_btnExport, 0, 4);
 
         // Wire events
         _btnBrowseExport.Click += BrowseExportPath;
         _btnExport.Click += async (_, _) => await RunExportAsync();
 
-        // Anchor/resize
-        card.Resize += (_, _) =>
-        {
-            int w = card.Width - 40;
-            if (w < 10) return;
-            pathRow.Width = w;
-            _lblExportStatus.Width = w;
-            _btnExport.Width = Math.Min(160, w);
-        };
-
-        card.Controls.AddRange(new Control[]
-        {
-            iconLbl, lblCardTitle, lblDesc,
-            lblPathLabel, pathRow,
-            _lblExportStatus, _btnExport
-        });
-
+        card.Controls.Add(layout);
         return card;
     }
 
@@ -326,6 +379,34 @@ public class BackupForm : UserControl
 
         card.Paint += (s, e) => PaintCard(e.Graphics, card, AmberColor);
 
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 6,
+            Padding = new Padding(20, 16, 20, 16),
+            Margin = new Padding(0)
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // Header
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // Warning
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // Path label
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // Path box
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f)); // Status spacer
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // Button
+
+        // Icon + Title Layout
+        var headerLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            ColumnCount = 2,
+            RowCount = 2,
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, 12)
+        };
+        headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 68f));
+        headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+
         var iconLbl = new Label
         {
             Text = "📂",
@@ -333,19 +414,18 @@ public class BackupForm : UserControl
             ForeColor = AmberColor,
             AutoSize = false,
             Size = new Size(60, 60),
-            Location = new Point(20, 16),
-            TextAlign = ContentAlignment.MiddleCenter
+            TextAlign = ContentAlignment.MiddleCenter,
+            Margin = new Padding(0)
         };
+        headerLayout.SetRowSpan(iconLbl, 2);
 
         var lblCardTitle = new Label
         {
             Text = "Restore Backup",
             Font = new Font("Segoe UI", 13f, FontStyle.Bold),
             ForeColor = TextDark,
-            AutoSize = false,
-            Size = new Size(300, 28),
-            Location = new Point(88, 16),
-            TextAlign = ContentAlignment.MiddleLeft
+            AutoSize = true,
+            Margin = new Padding(0, 6, 0, 4)
         };
 
         var lblDesc = new Label
@@ -353,25 +433,28 @@ public class BackupForm : UserControl
             Text = "Imports students and meal logs\nfrom a JSON backup file.",
             Font = new Font("Segoe UI", 9f),
             ForeColor = TextMuted,
-            AutoSize = false,
-            Size = new Size(300, 38),
-            Location = new Point(88, 46),
-            TextAlign = ContentAlignment.TopLeft
+            AutoSize = true,
+            Margin = new Padding(0)
         };
+
+        headerLayout.Controls.Add(iconLbl, 0, 0);
+        headerLayout.Controls.Add(lblCardTitle, 1, 0);
+        headerLayout.Controls.Add(lblDesc, 1, 1);
+        layout.Controls.Add(headerLayout, 0, 0);
 
         // Warning badge
         var warnPanel = new Panel
         {
-            Location = new Point(20, 90),
-            Size = new Size(0, 26),
-            BackColor = AmberLight
+            Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top,
+            Height = 26,
+            BackColor = AmberLight,
+            Margin = new Padding(0, 0, 0, 16)
         };
 
         warnPanel.Paint += (s, e) =>
         {
             using var pen = new Pen(Color.FromArgb(250, 200, 80), 1);
-            e.Graphics.DrawRectangle(pen, 0, 0,
-                warnPanel.Width - 1, warnPanel.Height - 1);
+            e.Graphics.DrawRectangle(pen, 0, 0, warnPanel.Width - 1, warnPanel.Height - 1);
         };
 
         var warnLbl = new Label
@@ -384,22 +467,36 @@ public class BackupForm : UserControl
             Padding = new Padding(8, 0, 0, 0)
         };
         warnPanel.Controls.Add(warnLbl);
+        layout.Controls.Add(warnPanel, 0, 1);
+
+        // Path label
+        var lblPathLabel = MakeFieldLabel("LOAD FROM");
+        lblPathLabel.Margin = new Padding(0, 0, 0, 4);
+        layout.Controls.Add(lblPathLabel, 0, 2);
 
         // Path row
-        var lblPathLabel = MakeFieldLabel("LOAD FROM", new Point(20, 124));
-
         var pathRow = new Panel
         {
-            Location = new Point(20, 144),
-            Size = new Size(0, 36),
-            BackColor = Color.FromArgb(246, 248, 252)
+            Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top,
+            Height = 36,
+            BackColor = Color.FromArgb(246, 248, 252),
+            Margin = new Padding(0)
         };
         pathRow.Paint += (s, e) =>
         {
             using var pen = new Pen(BorderLight, 1);
-            e.Graphics.DrawRectangle(pen, 0, 0,
-                pathRow.Width - 1, pathRow.Height - 1);
+            e.Graphics.DrawRectangle(pen, 0, 0, pathRow.Width - 1, pathRow.Height - 1);
         };
+
+        var pathLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            Margin = new Padding(0)
+        };
+        pathLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        pathLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
         _lblImportPath = new Label
         {
@@ -409,13 +506,18 @@ public class BackupForm : UserControl
             AutoSize = false,
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
-            Padding = new Padding(8, 0, 0, 0)
+            Padding = new Padding(8, 0, 0, 0),
+            Margin = new Padding(0)
         };
-        pathRow.Controls.Add(_lblImportPath);
 
         _btnBrowseImport = MakeSecondaryButton("Browse…", 80);
-        _btnBrowseImport.Dock = DockStyle.Right;
-        pathRow.Controls.Add(_btnBrowseImport);
+        _btnBrowseImport.Anchor = AnchorStyles.Right;
+        _btnBrowseImport.Margin = new Padding(0);
+
+        pathLayout.Controls.Add(_lblImportPath, 0, 0);
+        pathLayout.Controls.Add(_btnBrowseImport, 1, 0);
+        pathRow.Controls.Add(pathLayout);
+        layout.Controls.Add(pathRow, 0, 3);
 
         // Status label
         _lblImportStatus = new Label
@@ -423,42 +525,26 @@ public class BackupForm : UserControl
             Text = string.Empty,
             Font = new Font("Segoe UI", 8.5f),
             ForeColor = SuccessGreen,
-            AutoSize = false,
-            Size = new Size(0, 18),
-            Location = new Point(20, 188),
-            TextAlign = ContentAlignment.MiddleLeft
+            AutoSize = true,
+            Anchor = AnchorStyles.Bottom | AnchorStyles.Left,
+            Margin = new Padding(0, 0, 0, 8)
         };
+        layout.Controls.Add(_lblImportStatus, 0, 4);
 
         // Import button
         _btnImport = MakePrimaryButton("📂  Restore Now", AmberColor, 160);
-        _btnImport.Location = new Point(20, 210);
-        _btnImport.MouseEnter += (_, _) =>
-            _btnImport.BackColor = Color.FromArgb(210, 130, 0);
-        _btnImport.MouseLeave += (_, _) =>
-            _btnImport.BackColor = AmberColor;
+        _btnImport.Anchor = AnchorStyles.Left;
+        _btnImport.Margin = new Padding(0);
+        _btnImport.MouseEnter += (_, _) => _btnImport.BackColor = Color.FromArgb(210, 130, 0);
+        _btnImport.MouseLeave += (_, _) => _btnImport.BackColor = AmberColor;
+
+        layout.Controls.Add(_btnImport, 0, 5);
 
         // Wire events
         _btnBrowseImport.Click += BrowseImportPath;
         _btnImport.Click += async (_, _) => await RunImportAsync();
 
-        // Anchor/resize
-        card.Resize += (_, _) =>
-        {
-            int w = card.Width - 40;
-            if (w < 10) return;
-            warnPanel.Width = w;
-            pathRow.Width = w;
-            _lblImportStatus.Width = w;
-            _btnImport.Width = Math.Min(160, w);
-        };
-
-        card.Controls.AddRange(new Control[]
-        {
-            iconLbl, lblCardTitle, lblDesc, warnPanel,
-            lblPathLabel, pathRow,
-            _lblImportStatus, _btnImport
-        });
-
+        card.Controls.Add(layout);
         return card;
     }
 
@@ -470,7 +556,8 @@ public class BackupForm : UserControl
         {
             Dock = DockStyle.Fill,
             BackColor = BgColor,
-            Padding = new Padding(20, 12, 20, 0)
+            Padding = new Padding(20, 12, 20, 0),
+            Margin = new Padding(0)
         };
 
         var logCard = new Panel
@@ -482,8 +569,7 @@ public class BackupForm : UserControl
         logCard.Paint += (s, e) =>
         {
             using var pen = new Pen(Color.FromArgb(40, 80, 60), 1);
-            e.Graphics.DrawRectangle(pen, 0, 0,
-                logCard.Width - 1, logCard.Height - 1);
+            e.Graphics.DrawRectangle(pen, 0, 0, logCard.Width - 1, logCard.Height - 1);
             using var bar = new SolidBrush(TealAccent);
             e.Graphics.FillRectangle(bar, 0, 0, logCard.Width, 3);
         };
@@ -499,9 +585,18 @@ public class BackupForm : UserControl
         logHeaderPanel.Paint += (s, e) =>
         {
             using var pen = new Pen(Color.FromArgb(40, 70, 55), 1);
-            e.Graphics.DrawLine(pen, 0, logHeaderPanel.Height - 1,
-                logHeaderPanel.Width, logHeaderPanel.Height - 1);
+            e.Graphics.DrawLine(pen, 0, logHeaderPanel.Height - 1, logHeaderPanel.Width, logHeaderPanel.Height - 1);
         };
+
+        var headerLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            Margin = new Padding(0)
+        };
+        headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
         var lblLogTitle = new Label
         {
@@ -509,9 +604,9 @@ public class BackupForm : UserControl
             Font = new Font("Segoe UI", 8f, FontStyle.Bold),
             ForeColor = TealAccent,
             AutoSize = true,
-            Location = new Point(0, 0),
-            Height = 34,
-            TextAlign = ContentAlignment.MiddleLeft
+            Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Bottom,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Margin = new Padding(0)
         };
 
         var btnClearLog = new Button
@@ -523,7 +618,9 @@ public class BackupForm : UserControl
             FlatStyle = FlatStyle.Flat,
             Size = new Size(48, 22),
             Cursor = Cursors.Hand,
-            TabStop = false
+            TabStop = false,
+            Anchor = AnchorStyles.Right,
+            Margin = new Padding(0)
         };
         btnClearLog.FlatAppearance.BorderSize = 0;
         btnClearLog.Click += (_, _) =>
@@ -532,12 +629,9 @@ public class BackupForm : UserControl
             LogActivity("System", "Log cleared.");
         };
 
-        logHeaderPanel.Controls.Add(lblLogTitle);
-        logHeaderPanel.Resize += (_, _) =>
-            btnClearLog.Location = new Point(
-                logHeaderPanel.Width - btnClearLog.Width - 14,
-                (logHeaderPanel.Height - btnClearLog.Height) / 2);
-        logHeaderPanel.Controls.Add(btnClearLog);
+        headerLayout.Controls.Add(lblLogTitle, 0, 0);
+        headerLayout.Controls.Add(btnClearLog, 1, 0);
+        logHeaderPanel.Controls.Add(headerLayout);
 
         _rtbLog = new RichTextBox
         {
@@ -574,15 +668,25 @@ public class BackupForm : UserControl
             e.Graphics.DrawLine(pen, 0, 0, _statusBar.Width, 0);
         };
 
+        var statusLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            Margin = new Padding(0)
+        };
+        statusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+        statusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+
         _lblLastAction = new Label
         {
             Text = "No backup or restore has been run this session.",
             Font = new Font("Segoe UI", 8.5f),
             ForeColor = TextMuted,
             AutoSize = true,
-            Location = new Point(0, 0),
-            Height = 36,
-            TextAlign = ContentAlignment.MiddleLeft
+            Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Bottom,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Margin = new Padding(0)
         };
 
         _lblStatus = new Label
@@ -591,14 +695,14 @@ public class BackupForm : UserControl
             Font = new Font("Segoe UI", 8.5f),
             ForeColor = TealAccent,
             AutoSize = true,
-            Height = 36,
-            TextAlign = ContentAlignment.MiddleLeft
+            Anchor = AnchorStyles.Right | AnchorStyles.Top | AnchorStyles.Bottom,
+            TextAlign = ContentAlignment.MiddleRight,
+            Margin = new Padding(0)
         };
 
-        _statusBar.Controls.AddRange(new Control[] { _lblLastAction, _lblStatus });
-        _statusBar.Resize += (_, _) =>
-            _lblStatus.Location = new Point(
-                _statusBar.Width - _lblStatus.Width - 16, 0);
+        statusLayout.Controls.Add(_lblLastAction, 0, 0);
+        statusLayout.Controls.Add(_lblStatus, 1, 0);
+        _statusBar.Controls.Add(statusLayout);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -672,7 +776,7 @@ public class BackupForm : UserControl
             return;
         }
 
-        SetLoading(_btnExport, true, "Exporting…");
+        await SetLoadingAsync(_btnExport, true, "Exporting…");
         SetStatus("Exporting data…", TextMuted);
         LogActivity("Export", $"Starting export to: {_exportPath}");
 
@@ -722,7 +826,7 @@ public class BackupForm : UserControl
         }
         finally
         {
-            SetLoading(_btnExport, false, "💾  Export Now");
+            await SetLoadingAsync(_btnExport, false, "💾  Export Now");
         }
     }
 
@@ -757,7 +861,7 @@ public class BackupForm : UserControl
             return;
         }
 
-        SetLoading(_btnImport, true, "Restoring…");
+        await SetLoadingAsync(_btnImport, true, "Restoring…");
         SetStatus("Importing data…", TextMuted);
         LogActivity("Import", $"Starting import from: {_importPath}");
 
@@ -803,7 +907,7 @@ public class BackupForm : UserControl
         }
         finally
         {
-            SetLoading(_btnImport, false, "📂  Restore Now");
+            await SetLoadingAsync(_btnImport, false, "📂  Restore Now");
         }
     }
 
@@ -875,19 +979,17 @@ public class BackupForm : UserControl
         lbl.ForeColor = color;
     }
 
-    private void SetLoading(Button btn, bool loading, string label)
+    private async Task SetLoadingAsync(Button btn, bool loading, string label)
     {
         btn.Enabled = !loading;
         btn.Text = label;
-        Application.DoEvents();
+        await Task.Yield(); // Rule 11 implementation
     }
 
     private void SetStatus(string msg, Color color)
     {
         _lblStatus.ForeColor = color;
         _lblStatus.Text = msg;
-        _lblStatus.Location = new Point(
-            _statusBar.Width - _lblStatus.Width - 16, 0);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -930,14 +1032,12 @@ public class BackupForm : UserControl
         return btn;
     }
 
-    private static Label MakeFieldLabel(string text, Point location) => new()
+    private static Label MakeFieldLabel(string text) => new()
     {
         Text = text,
         Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
         ForeColor = TextMuted,
-        AutoSize = false,
-        Size = new Size(300, 18),
-        Location = location,
+        AutoSize = true,
         TextAlign = ContentAlignment.BottomLeft
     };
 
