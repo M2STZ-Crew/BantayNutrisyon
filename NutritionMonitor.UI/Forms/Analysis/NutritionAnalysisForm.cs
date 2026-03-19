@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿// File Path: NutritionMonitor.UI/Forms/Analysis/NutritionAnalysisForm.cs
+using Microsoft.Extensions.DependencyInjection;
 using NutritionMonitor.Models.DTOs;
 using NutritionMonitor.Models.Enums;
 using NutritionMonitor.Models.Interfaces;
@@ -7,6 +8,12 @@ using System.Runtime.ConstrainedExecution;
 using System.Runtime.Intrinsics.X86;
 using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement;
+using System.Drawing;
+using System.Windows.Forms;
+using System.Collections.Generic;
+using System;
+using System.Threading.Tasks;
+using System.Linq;
 using SerilogLog = Serilog.Log;
 
 namespace NutritionMonitor.UI.Forms.Analysis;
@@ -90,9 +97,10 @@ public class NutritionAnalysisForm : UserControl
             RowCount = 4,
             ColumnCount = 1,
             BackColor = BgColor,
-            Padding = new Padding(0)
+            Padding = new Padding(0),
+            Margin = new Padding(0)
         };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 60f));  // filter
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 68f));  // filter
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 54f));  // summary strip
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f)); // split pane
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36f));  // status bar
@@ -127,7 +135,7 @@ public class NutritionAnalysisForm : UserControl
                 _filterPanel.Width, _filterPanel.Height - 1);
         };
 
-        // Use FlowLayoutPanel so items wrap gracefully
+        // Rule 3: FlowLayoutPanel for horizontal filter bar
         var flow = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -181,31 +189,35 @@ public class NutritionAnalysisForm : UserControl
         };
 
         // ── Buttons ────────────────────────────────────────────────────────────
-        var btnBlock = new Panel
+        var btnBlock = new FlowLayoutPanel
         {
-            Size = new Size(420, 44),
-            BackColor = Color.Transparent
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            AutoSize = true,
+            BackColor = Color.Transparent,
+            Padding = new Padding(0, 18, 0, 0), // Push down to align with inputs
+            Margin = new Padding(0)
         };
 
         _btnAnalyze = MakeButton("▶  Analyze Student",
-            TealAccent, Color.White, new Point(0, 6), 160);
+            TealAccent, Color.White, 160);
 
         _btnAnalyzeAll = MakeButton("▶▶  Analyze All",
-            Color.FromArgb(40, 60, 100), Color.White, new Point(168, 6), 140);
+            Color.FromArgb(40, 60, 100), Color.White, 140);
 
         _btnClear = MakeButton("✕  Clear",
-            Color.FromArgb(240, 244, 248), TextMid, new Point(316, 6), 80);
+            Color.FromArgb(240, 244, 248), TextMid, 80);
         _btnClear.FlatAppearance.BorderSize = 1;
         _btnClear.FlatAppearance.BorderColor = BorderLight;
 
         btnBlock.Controls.AddRange(new Control[]
         {
-        _btnAnalyze, _btnAnalyzeAll, _btnClear
+            _btnAnalyze, _btnAnalyzeAll, _btnClear
         });
 
         flow.Controls.AddRange(new Control[]
         {
-        studentBlock, fromBlock, toBlock, spacer, btnBlock
+            studentBlock, fromBlock, toBlock, spacer, btnBlock
         });
 
         _filterPanel.Controls.Add(flow);
@@ -218,12 +230,13 @@ public class NutritionAnalysisForm : UserControl
     // ── Helper: labeled flow block ─────────────────────────────────────────────
     private static Panel MakeFlowBlock(string labelText, out Panel innerPanel)
     {
-        var outer = new Panel
+        var outer = new FlowLayoutPanel
         {
-            Size = new Size(0, 44),  // width auto from content
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            AutoSize = true,
             BackColor = Color.Transparent,
-            Padding = new Padding(0, 0, 14, 0),
-            AutoSize = true
+            Margin = new Padding(0, 0, 14, 0)
         };
 
         var lbl = new Label
@@ -232,15 +245,14 @@ public class NutritionAnalysisForm : UserControl
             Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
             ForeColor = TextMuted,
             AutoSize = true,
-            Location = new Point(0, 0),
-            Height = 16
+            Margin = new Padding(0, 0, 0, 4)
         };
 
         innerPanel = new Panel
         {
-            Location = new Point(0, 18),
             AutoSize = true,
-            BackColor = Color.Transparent
+            BackColor = Color.Transparent,
+            Margin = new Padding(0)
         };
 
         outer.Controls.Add(lbl);
@@ -266,7 +278,15 @@ public class NutritionAnalysisForm : UserControl
                 _summaryStrip.Width, _summaryStrip.Height - 1);
         };
 
-        // Items: icon, label, value label ref, color
+        var summaryFlow = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            AutoSize = false,
+            Margin = new Padding(0)
+        };
+
         _lblTotalAnalyzed = MakeSummaryValue("—");
         _lblNormalCount = MakeSummaryValue("—");
         _lblAtRiskCount = MakeSummaryValue("—");
@@ -280,96 +300,94 @@ public class NutritionAnalysisForm : UserControl
             ("🔴", "Malnourished",    _lblMalCount,      DangerRed),
         };
 
-        int x = 0;
         foreach (var (icon, title, valLbl, color) in items)
         {
+            var block = new TableLayoutPanel
+            {
+                ColumnCount = 2,
+                RowCount = 2,
+                AutoSize = true,
+                Margin = new Padding(0, 0, 64, 0),
+                Padding = new Padding(0, 8, 0, 8)
+            };
+            block.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 36f));
+            block.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+
             var iconLbl = new Label
             {
                 Text = icon,
                 Font = new Font("Segoe UI", 13f),
                 ForeColor = color,
                 AutoSize = false,
-                Size = new Size(28, 54),
-                Location = new Point(x, 0),
-                TextAlign = ContentAlignment.MiddleCenter
+                Size = new Size(28, 38),
+                TextAlign = ContentAlignment.MiddleCenter,
+                Margin = new Padding(0)
             };
+            block.SetRowSpan(iconLbl, 2);
 
             var titleLbl = new Label
             {
                 Text = title.ToUpperInvariant(),
                 Font = new Font("Segoe UI", 7f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(100, 130, 170),
-                AutoSize = false,
-                Size = new Size(130, 18),
-                Location = new Point(x + 32, 8),
-                TextAlign = ContentAlignment.BottomLeft
+                AutoSize = true,
+                Margin = new Padding(0, 0, 0, 2),
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Left
             };
 
-            valLbl.Location = new Point(x + 32, 28);
             valLbl.ForeColor = color;
+            valLbl.Margin = new Padding(0);
 
-            _summaryStrip.Controls.Add(iconLbl);
-            _summaryStrip.Controls.Add(titleLbl);
-            _summaryStrip.Controls.Add(valLbl);
+            block.Controls.Add(iconLbl, 0, 0);
+            block.Controls.Add(titleLbl, 1, 0);
+            block.Controls.Add(valLbl, 1, 1);
 
-            x += 200;
+            summaryFlow.Controls.Add(block);
         }
+
+        _summaryStrip.Controls.Add(summaryFlow);
     }
 
     // ── Split Pane ────────────────────────────────────────────────────────────
 
     private void BuildSplitPane()
     {
+        // Rule 6: Strictly defer Splitter sizes to safe initialization methods
         _splitMain = new SplitContainer
         {
             Dock = DockStyle.Fill,
             Orientation = Orientation.Vertical,
             SplitterWidth = 6,
             BackColor = BorderLight
-            // ── NOTHING size-related here ──────────────────────────────────────
-            // Never set Panel1MinSize, Panel2MinSize, or SplitterDistance
-            // in the constructor. WinForms calls ApplyPanel2MinSize internally
-            // when Panel2MinSize is assigned, which triggers set_SplitterDistance
-            // while the control still has Width = 0, causing the crash.
         };
 
         _splitMain.Panel1.BackColor = BgColor;
         _splitMain.Panel2.BackColor = BgColor;
 
-        // HandleCreated fires after the HWND exists and layout has run.
-        // SizeChanged keeps the ratio correct when the user resizes the window.
-        _splitMain.HandleCreated += (_, _) => SetSplitterSafe();
-        _splitMain.SizeChanged += (_, _) => SetSplitterSafe();
+        _splitMain.HandleCreated += (_, _) => SetSplitterSafe(_splitMain);
+        _splitMain.SizeChanged += (_, _) => SetSplitterSafe(_splitMain);
 
         BuildStudentGrid();
         BuildDetailPanel();
     }
 
-    private void SetSplitterSafe()
+    private void SetSplitterSafe(SplitContainer s)
     {
-        // Guard: handle must exist and control must have real width
-        if (!_splitMain.IsHandleCreated) return;
-        if (_splitMain.Width <= 1) return;
+        if (!s.IsHandleCreated || s.Width <= 1) return;
 
         try
         {
-            // Set min sizes first — but only now that Width > 0
-            _splitMain.Panel1MinSize = 240;
-            _splitMain.Panel2MinSize = 300;
+            s.Panel1MinSize = 240;
+            s.Panel2MinSize = 300;
 
-            int desired = (int)(_splitMain.Width * 0.38);
-            int min = _splitMain.Panel1MinSize;
-            int max = _splitMain.Width
-                          - _splitMain.Panel2MinSize
-                          - _splitMain.SplitterWidth;
+            int desired = (int)(s.Width * 0.38);
+            int min = s.Panel1MinSize;
+            int max = s.Width - s.Panel2MinSize - s.SplitterWidth;
 
             if (max > min)
-                _splitMain.SplitterDistance = Math.Clamp(desired, min, max);
+                s.SplitterDistance = Math.Clamp(desired, min, max);
         }
-        catch (InvalidOperationException)
-        {
-            // Swallow any residual layout-transition edge cases silently
-        }
+        catch (InvalidOperationException) { }
     }
 
 
@@ -491,10 +509,19 @@ public class NutritionAnalysisForm : UserControl
     {
         _detailPanel.Controls.Clear();
 
+        var placeholderLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 1,
+            Margin = new Padding(0)
+        };
+
         var card = new Panel
         {
             Size = new Size(380, 160),
-            BackColor = CardBg
+            BackColor = CardBg,
+            Anchor = AnchorStyles.None // Natural centering
         };
 
         card.Paint += (s, e) =>
@@ -515,17 +542,9 @@ public class NutritionAnalysisForm : UserControl
         };
 
         card.Controls.Add(lbl);
+        placeholderLayout.Controls.Add(card, 0, 0);
 
-        _detailPanel.Controls.Add(card);
-        _detailPanel.Resize += (_, _) =>
-        {
-            card.Location = new Point(
-                Math.Max(0, (_detailPanel.Width - card.Width) / 2),
-                Math.Max(0, (_detailPanel.Height - card.Height) / 2 - 20));
-        };
-        card.Location = new Point(
-            Math.Max(0, (_detailPanel.Width - card.Width) / 2),
-            Math.Max(0, (_detailPanel.Height - card.Height) / 2 - 20));
+        _detailPanel.Controls.Add(placeholderLayout);
     }
 
     // ── Status Bar ────────────────────────────────────────────────────────────
@@ -545,15 +564,26 @@ public class NutritionAnalysisForm : UserControl
             e.Graphics.DrawLine(pen, 0, 0, _statusBar.Width, 0);
         };
 
+        var statusLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            Margin = new Padding(0)
+        };
+        statusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+        statusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+        statusLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+
         _lblCount = new Label
         {
             Text = "No analysis run yet.",
             Font = new Font("Segoe UI", 8.5f),
             ForeColor = TextMuted,
             AutoSize = true,
-            Location = new Point(0, 0),
-            Height = 36,
-            TextAlign = ContentAlignment.MiddleLeft
+            Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Bottom,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Margin = new Padding(0)
         };
 
         _lblStatus = new Label
@@ -562,14 +592,15 @@ public class NutritionAnalysisForm : UserControl
             Font = new Font("Segoe UI", 8.5f),
             ForeColor = TealAccent,
             AutoSize = true,
-            Height = 36,
-            TextAlign = ContentAlignment.MiddleLeft
+            Anchor = AnchorStyles.Right | AnchorStyles.Top | AnchorStyles.Bottom,
+            TextAlign = ContentAlignment.MiddleRight,
+            Margin = new Padding(0)
         };
 
-        _statusBar.Controls.AddRange(new Control[] { _lblCount, _lblStatus });
-        _statusBar.Resize += (_, _) =>
-            _lblStatus.Location = new Point(
-                _statusBar.Width - _lblStatus.Width - 16, 0);
+        statusLayout.Controls.Add(_lblCount, 0, 0);
+        statusLayout.Controls.Add(_lblStatus, 1, 0);
+
+        _statusBar.Controls.Add(statusLayout);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -605,7 +636,7 @@ public class NutritionAnalysisForm : UserControl
         }
 
         SetStatus("Analyzing…", TextMuted);
-        SetLoading(true);
+        await SetLoadingAsync(true);
 
         try
         {
@@ -644,14 +675,14 @@ public class NutritionAnalysisForm : UserControl
         }
         finally
         {
-            SetLoading(false);
+            await SetLoadingAsync(false);
         }
     }
 
     private async Task AnalyzeAllAsync()
     {
         SetStatus("Analyzing all students…", TextMuted);
-        SetLoading(true);
+        await SetLoadingAsync(true);
 
         try
         {
@@ -688,7 +719,7 @@ public class NutritionAnalysisForm : UserControl
         }
         finally
         {
-            SetLoading(false);
+            await SetLoadingAsync(false);
         }
     }
 
@@ -761,63 +792,78 @@ public class NutritionAnalysisForm : UserControl
     {
         _detailPanel.Controls.Clear();
 
-        int y = 16;
-        int padX = 16;
-        int width = _detailPanel.Width - padX * 2 - 20;
-        width = Math.Max(300, width);
+        // Rule 2: Root stacking layout for detail view
+        var rootTable = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            ColumnCount = 1,
+            Padding = new Padding(16, 16, 16, 32),
+            Margin = new Padding(0)
+        };
+        rootTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+
+        int row = 0;
+        void AddRow() => rootTable.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         // ── Student header card ───────────────────────────────────────────────
-        var headerCard = BuildDetailCard(padX, y, width, 90);
+        AddRow();
+        var headerCard = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 94,
+            BackColor = CardBg,
+            Margin = new Padding(0, 0, 0, 16)
+        };
+
+        var statusColor = result.Status switch
+        {
+            NutritionStatus.Malnourished => DangerRed,
+            NutritionStatus.AtRisk => AmberColor,
+            _ => NormalGreen
+        };
+
         headerCard.Paint += (s, e) =>
         {
             var g = e.Graphics;
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-
-            var statusColor = result.Status switch
-            {
-                NutritionStatus.Malnourished => DangerRed,
-                NutritionStatus.AtRisk => AmberColor,
-                _ => NormalGreen
-            };
-
-            // Left status bar
             using var bar = new SolidBrush(statusColor);
             g.FillRectangle(bar, 0, 0, 5, headerCard.Height);
-
             using var pen = new Pen(BorderLight, 1);
             g.DrawRectangle(pen, 0, 0, headerCard.Width - 1, headerCard.Height - 1);
         };
+
+        var headerLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 2,
+            Padding = new Padding(16, 12, 16, 12)
+        };
+        headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        headerLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        headerLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         var lblName = new Label
         {
             Text = result.StudentName,
             Font = new Font("Segoe UI", 13f, FontStyle.Bold),
             ForeColor = TextDark,
-            AutoSize = false,
-            Size = new Size(width - 130, 28),
-            Location = new Point(16, 10),
-            TextAlign = ContentAlignment.MiddleLeft
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, 4)
         };
 
         var lblMeta = new Label
         {
             Text = $"Age {result.Age}  ·  {result.Gender}  ·  " +
-                        $"{result.Period.From:MMM dd} – {result.Period.To:MMM dd, yyyy}",
+                   $"{result.Period.From:MMM dd} – {result.Period.To:MMM dd, yyyy}",
             Font = new Font("Segoe UI", 8.5f),
             ForeColor = TextMuted,
-            AutoSize = false,
-            Size = new Size(width - 130, 20),
-            Location = new Point(16, 40),
-            TextAlign = ContentAlignment.MiddleLeft
+            AutoSize = true,
+            Margin = new Padding(0)
         };
 
-        // Status badge
-        var statusColor2 = result.Status switch
-        {
-            NutritionStatus.Malnourished => DangerRed,
-            NutritionStatus.AtRisk => AmberColor,
-            _ => NormalGreen
-        };
         var statusBg = result.Status switch
         {
             NutritionStatus.Malnourished => DangerLight,
@@ -829,34 +875,42 @@ public class NutritionAnalysisForm : UserControl
         {
             Text = StatusLabel(result.Status),
             Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-            ForeColor = statusColor2,
+            ForeColor = statusColor,
             BackColor = statusBg,
-            AutoSize = false,
-            Size = new Size(130, 30),
-            Location = new Point(width - 140, 20),
-            TextAlign = ContentAlignment.MiddleCenter
+            AutoSize = true,
+            Padding = new Padding(12, 6, 12, 6),
+            Anchor = AnchorStyles.Right | AnchorStyles.Bottom,
+            Margin = new Padding(0, 0, 0, 4)
         };
 
         var lblDeficit = new Label
         {
             Text = $"Weighted Deficit: {result.WeightedDeficitPercentage:F1}%",
             Font = new Font("Segoe UI", 8f, FontStyle.Bold),
-            ForeColor = statusColor2,
-            AutoSize = false,
-            Size = new Size(width - 130, 18),
-            Location = new Point(16, 64),
-            TextAlign = ContentAlignment.MiddleLeft
+            ForeColor = statusColor,
+            AutoSize = true,
+            Anchor = AnchorStyles.Right | AnchorStyles.Top,
+            Margin = new Padding(0)
         };
 
-        headerCard.Controls.AddRange(new Control[]
-        {
-            lblName, lblMeta, lblStatusBadge, lblDeficit
-        });
-        _detailPanel.Controls.Add(headerCard);
-        y += 100;
+        headerLayout.Controls.Add(lblName, 0, 0);
+        headerLayout.Controls.Add(lblMeta, 0, 1);
+        headerLayout.Controls.Add(lblStatusBadge, 1, 0);
+        headerLayout.Controls.Add(lblDeficit, 1, 1);
+
+        headerCard.Controls.Add(headerLayout);
+        rootTable.Controls.Add(headerCard, 0, row++);
 
         // ── Averages card ─────────────────────────────────────────────────────
-        var avgCard = BuildDetailCard(padX, y, width, 120);
+        AddRow();
+        var avgCard = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 100,
+            BackColor = CardBg,
+            Margin = new Padding(0, 0, 0, 24)
+        };
+
         avgCard.Paint += (s, e) =>
         {
             using var pen = new Pen(BorderLight, 1);
@@ -865,17 +919,30 @@ public class NutritionAnalysisForm : UserControl
             e.Graphics.FillRectangle(bar, 0, 0, avgCard.Width, 3);
         };
 
+        var avgLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 5,
+            RowCount = 3,
+            Padding = new Padding(12, 10, 12, 10)
+        };
+        for (int i = 0; i < 5; i++)
+            avgLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20f));
+
+        avgLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        avgLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f)); // flexible space
+        avgLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
         var lblAvgTitle = new Label
         {
             Text = "PERIOD AVERAGES",
             Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
             ForeColor = TextMuted,
-            AutoSize = false,
-            Size = new Size(width - 20, 20),
-            Location = new Point(12, 10),
-            TextAlign = ContentAlignment.MiddleLeft
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, 8)
         };
-        avgCard.Controls.Add(lblAvgTitle);
+        avgLayout.Controls.Add(lblAvgTitle, 0, 0);
+        avgLayout.SetColumnSpan(lblAvgTitle, 5);
 
         var avgItems = new[]
         {
@@ -886,97 +953,80 @@ public class NutritionAnalysisForm : UserControl
             ($"🥦 {result.AvgFiber:F1}g",           "Fiber"),
         };
 
-        int ax = 12;
-        int colW = (width - 24) / 5;
-        foreach (var (val, lbl) in avgItems)
+        for (int i = 0; i < avgItems.Length; i++)
         {
-            avgCard.Controls.Add(new Label
+            var valLbl = new Label
             {
-                Text = val,
-                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                Text = avgItems[i].Item1,
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
                 ForeColor = TealAccent,
-                AutoSize = false,
-                Size = new Size(colW, 22),
-                Location = new Point(ax, 36),
-                TextAlign = ContentAlignment.MiddleLeft
-            });
-            avgCard.Controls.Add(new Label
+                AutoSize = true,
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Left,
+                Margin = new Padding(0, 0, 0, 2)
+            };
+            var titleLbl = new Label
             {
-                Text = lbl,
+                Text = avgItems[i].Item2,
                 Font = new Font("Segoe UI", 7.5f),
                 ForeColor = TextMuted,
-                AutoSize = false,
-                Size = new Size(colW, 16),
-                Location = new Point(ax, 60),
-                TextAlign = ContentAlignment.MiddleLeft
-            });
-            ax += colW;
+                AutoSize = true,
+                Anchor = AnchorStyles.Top | AnchorStyles.Left,
+                Margin = new Padding(0)
+            };
+            avgLayout.Controls.Add(valLbl, i, 1);
+            avgLayout.Controls.Add(titleLbl, i, 2);
         }
 
-        _detailPanel.Controls.Add(avgCard);
-        y += 130;
+        avgCard.Controls.Add(avgLayout);
+        rootTable.Controls.Add(avgCard, 0, row++);
 
         // ── Deficit breakdown card ────────────────────────────────────────────
         if (result.Deficits.Count > 0)
         {
+            AddRow();
             var defTitle = new Label
             {
                 Text = "NUTRIENT DEFICIT BREAKDOWN",
                 Font = new Font("Segoe UI", 8f, FontStyle.Bold),
                 ForeColor = TextMid,
-                AutoSize = false,
-                Size = new Size(width, 20),
-                Location = new Point(padX, y),
-                TextAlign = ContentAlignment.BottomLeft
+                AutoSize = true,
+                Margin = new Padding(0, 0, 0, 8)
             };
-            _detailPanel.Controls.Add(defTitle);
-            y += 24;
+            rootTable.Controls.Add(defTitle, 0, row++);
 
-            foreach (var deficit in result.Deficits
-                .OrderByDescending(d => d.DeficitPercentage))
+            foreach (var deficit in result.Deficits.OrderByDescending(d => d.DeficitPercentage))
             {
-                var row = BuildDeficitRow(
-                    padX, y, width, deficit);
-                _detailPanel.Controls.Add(row);
-                y += row.Height + 6;
+                AddRow();
+                var defRow = BuildDeficitRow(deficit);
+                rootTable.Controls.Add(defRow, 0, row++);
             }
         }
 
         // ── Reni reference note ───────────────────────────────────────────────
-        y += 8;
+        AddRow();
         var refNote = new Label
         {
             Text = "※  Reference values based on DOH Philippine RENI 2015 standards.",
             Font = new Font("Segoe UI", 7.5f, FontStyle.Italic),
             ForeColor = TextMuted,
-            AutoSize = false,
-            Size = new Size(width, 18),
-            Location = new Point(padX, y),
-            TextAlign = ContentAlignment.MiddleLeft
+            AutoSize = true,
+            Margin = new Padding(0, 16, 0, 0)
         };
-        _detailPanel.Controls.Add(refNote);
+        rootTable.Controls.Add(refNote, 0, row++);
 
-        // Resize handler to reflow detail width
-        _detailPanel.Resize += (_, _) => ReflowDetail(result);
+        _detailPanel.Controls.Add(rootTable);
     }
 
-    private Panel BuildDeficitRow(
-        int x, int y, int width, NutrientDeficitDetail deficit)
+    private Panel BuildDeficitRow(NutrientDeficitDetail deficit)
     {
-        var row = new Panel
+        var rowPanel = new Panel
         {
-            Location = new Point(x, y),
-            Size = new Size(width, 52),
-            BackColor = CardBg
+            Dock = DockStyle.Top,
+            Height = 52,
+            BackColor = CardBg,
+            Margin = new Padding(0, 0, 0, 8)
         };
 
-        row.Paint += (s, e) =>
-        {
-            using var pen = new Pen(BorderLight, 1);
-            e.Graphics.DrawRectangle(pen, 0, 0, row.Width - 1, row.Height - 1);
-        };
-
-        // Status color by deficit amount
         Color defColor = deficit.DeficitPercentage switch
         {
             >= 30 => DangerRed,
@@ -984,90 +1034,89 @@ public class NutritionAnalysisForm : UserControl
             _ => NormalGreen
         };
 
-        // Left color bar
-        row.Paint += (s, e) =>
+        rowPanel.Paint += (s, e) =>
         {
+            using var pen = new Pen(BorderLight, 1);
+            e.Graphics.DrawRectangle(pen, 0, 0, rowPanel.Width - 1, rowPanel.Height - 1);
             using var bar = new SolidBrush(defColor);
-            e.Graphics.FillRectangle(bar, 0, 0, 4, row.Height);
+            e.Graphics.FillRectangle(bar, 0, 0, 4, rowPanel.Height);
         };
+
+        var table = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 3,
+            RowCount = 2,
+            Padding = new Padding(12, 6, 12, 6)
+        };
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180f));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80f));
+        table.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
+        table.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
 
         var lblName = new Label
         {
             Text = deficit.NutrientName,
             Font = new Font("Segoe UI", 9f, FontStyle.Bold),
             ForeColor = TextDark,
-            AutoSize = false,
-            Size = new Size(120, 18),
-            Location = new Point(12, 8),
-            TextAlign = ContentAlignment.MiddleLeft
+            AutoSize = true,
+            Anchor = AnchorStyles.Left | AnchorStyles.Bottom,
+            Margin = new Padding(0, 0, 0, 2)
         };
 
-        var lblActual = new Label
+        var lblDetails = new Label
         {
-            Text = $"Actual: {deficit.ActualValue:F1} {deficit.Unit}",
-            Font = new Font("Segoe UI", 8f),
+            Text = $"Actual: {deficit.ActualValue:F1}   RENI: {deficit.RecommendedValue:F1} {deficit.Unit}",
+            Font = new Font("Segoe UI", 7.5f),
             ForeColor = TextMid,
-            AutoSize = false,
-            Size = new Size(160, 16),
-            Location = new Point(12, 28),
-            TextAlign = ContentAlignment.MiddleLeft
+            AutoSize = true,
+            Anchor = AnchorStyles.Left | AnchorStyles.Top,
+            Margin = new Padding(0)
         };
 
-        var lblRecommended = new Label
+        var track = new Panel
         {
-            Text = $"RENI: {deficit.RecommendedValue:F1} {deficit.Unit}",
-            Font = new Font("Segoe UI", 8f),
-            ForeColor = TextMuted,
-            AutoSize = false,
-            Size = new Size(160, 16),
-            Location = new Point(160, 28),
-            TextAlign = ContentAlignment.MiddleLeft
+            Anchor = AnchorStyles.Left | AnchorStyles.Right,
+            Height = 8,
+            BackColor = Color.FromArgb(230, 235, 242),
+            Margin = new Padding(16, 0, 16, 0)
         };
 
-        // Deficit percentage badge
+        var fill = new Panel
+        {
+            Height = 8,
+            BackColor = defColor,
+            Location = new Point(0, 0)
+        };
+
+        track.Controls.Add(fill);
+        track.Resize += (_, _) =>
+        {
+            fill.Width = (int)Math.Min(track.Width, track.Width * (deficit.DeficitPercentage / 100.0));
+        };
+
+        table.SetRowSpan(track, 2);
+
         var lblPct = new Label
         {
             Text = $"{deficit.DeficitPercentage:F1}%",
             Font = new Font("Segoe UI", 11f, FontStyle.Bold),
             ForeColor = defColor,
-            AutoSize = false,
-            Size = new Size(70, 52),
-            Location = new Point(row.Width - 80, 0),
-            TextAlign = ContentAlignment.MiddleCenter
+            AutoSize = true,
+            Anchor = AnchorStyles.Right | AnchorStyles.Top | AnchorStyles.Bottom,
+            TextAlign = ContentAlignment.MiddleCenter,
+            Margin = new Padding(0)
         };
+        table.SetRowSpan(lblPct, 2);
 
-        // Progress bar track
-        var trackW = row.Width - 290;
-        var barW = Math.Max(0, (int)(trackW * (deficit.DeficitPercentage / 100.0)));
-        barW = Math.Min(barW, trackW);
+        table.Controls.Add(lblName, 0, 0);
+        table.Controls.Add(lblDetails, 0, 1);
+        table.Controls.Add(track, 1, 0);
+        table.Controls.Add(lblPct, 2, 0);
 
-        var track = new Panel
-        {
-            Location = new Point(330, 20),
-            Size = new Size(trackW, 8),
-            BackColor = Color.FromArgb(230, 235, 242)
-        };
-
-        var fill = new Panel
-        {
-            Location = new Point(0, 0),
-            Size = new Size(barW, 8),
-            BackColor = defColor
-        };
-        track.Controls.Add(fill);
-
-        row.Controls.AddRange(new Control[]
-        {
-            lblName, lblActual, lblRecommended, track, lblPct
-        });
-
-        return row;
-    }
-
-    private void ReflowDetail(NutritionAnalysisDto result)
-    {
-        // Re-render detail on resize for correct widths
-        ShowDetailView(result);
+        rowPanel.Controls.Add(table);
+        return rowPanel;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1093,31 +1142,21 @@ public class NutritionAnalysisForm : UserControl
         _ => "✅ Normal"
     };
 
-    private void SetLoading(bool loading)
+    private async Task SetLoadingAsync(bool loading)
     {
         _btnAnalyze.Enabled = !loading;
         _btnAnalyzeAll.Enabled = !loading;
         _btnAnalyze.Text = loading ? "Analyzing…" : "▶  Analyze Student";
         _btnAnalyzeAll.Text = loading ? "Please wait…" : "▶▶  Analyze All";
-        Application.DoEvents();
+
+        // Rule 11: Task.Yield() allows the UI string change to visibly render
+        await Task.Yield();
     }
 
     private void SetStatus(string msg, Color color)
     {
         _lblStatus.ForeColor = color;
         _lblStatus.Text = msg;
-        _lblStatus.Location = new Point(
-            _statusBar.Width - _lblStatus.Width - 16, 0);
-    }
-
-    private static Panel BuildDetailCard(int x, int y, int width, int height)
-    {
-        return new Panel
-        {
-            Location = new Point(x, y),
-            Size = new Size(width, height),
-            BackColor = CardBg
-        };
     }
 
     private static Label MakeSummaryValue(string text) => new()
@@ -1126,21 +1165,12 @@ public class NutritionAnalysisForm : UserControl
         Font = new Font("Segoe UI", 14f, FontStyle.Bold),
         ForeColor = Color.White,
         AutoSize = true,
-        TextAlign = ContentAlignment.MiddleLeft
-    };
-
-    private static Label MakeFilterLabel(string text) => new()
-    {
-        Text = text,
-        Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
-        ForeColor = TextMuted,
-        AutoSize = true,
         TextAlign = ContentAlignment.MiddleLeft,
-        Height = 32
+        Margin = new Padding(0)
     };
 
     private static System.Windows.Forms.Button MakeButton(
-        string text, Color bg, Color fg, Point loc, int width)
+        string text, Color bg, Color fg, int width)
     {
         var btn = new System.Windows.Forms.Button
         {
@@ -1149,8 +1179,8 @@ public class NutritionAnalysisForm : UserControl
             BackColor = bg,
             ForeColor = fg,
             FlatStyle = FlatStyle.Flat,
-            Location = loc,
             Size = new Size(width, 36),
+            Margin = new Padding(0, 0, 8, 0),
             Cursor = Cursors.Hand,
             TabStop = false
         };
@@ -1178,4 +1208,3 @@ public class NutritionAnalysisForm : UserControl
         };
     }
 }
-
