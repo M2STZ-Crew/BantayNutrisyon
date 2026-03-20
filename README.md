@@ -147,7 +147,7 @@ M2STZ_SDG_PROJECT/
 | **Marcella, Justine S.** | Backend Developer | NutritionCalculatorService (RENI deficit algorithm), StudentService, ReportService, UserService, RENI Comparison Engine, deployment setup |
 | **Setenta, Kurt Danielle P.** | Frontend Developer & Graphic Designer | LoginForm, DashboardForm, StudentForm, MealLogForm, ReportsForm UI, async event wiring, all visual assets and icons |
 | **Moral, Justine Carlo R.** | Operations Support | Global exception handler, Serilog rolling log integration, JSON backup module, JSON restore module, cross-team testing support |
-| **Zarate, Kurt Russel B.** | QA Engineer, Data Analyst & Research Lead | Test case development, bug detection, ScottPlot chart implementation (ReportsForm), trend analysis, RRL/RRS sourcing, Models/DTOs/Enums design, algorithm validation |
+| **Zarate, Kurt Russel B.** | QA Engineer, Data Analyst & Research Lead | Test case development, bug detection, ScottPlot chart implementation (ReportsForm), Trend analysis, RRL/RRS sourcing, Big O Annotation, Models/DTOs/Enums design, algorithm validation |
 
 ---
 
